@@ -1,0 +1,37 @@
+# hi-vibe: 품질 가드 설정 (ruff, import-linter)
+# 코드가 너무 복잡해지지 않게, 모듈 간 순환 참조가 생기지 않게 잡아준다.
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+  "E",      # pycodestyle 오류
+  "F",      # pyflakes (미사용 import/변수 등)
+  "C901",   # 복잡도
+  "PLR0913" # 인자 너무 많음
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-args = 5
+
+[tool.importlinter]
+root_package = "src"
+
+# 실제 소스의 import 관계를 보고 도출한 레이어 (위가 아래를 써도 되고, 아래는 위를 모른다):
+#   menu(대화형 메뉴) -> cli(서브커맨드 라우팅) -> 기능 모듈들 -> ai_client/visualizer
+#   -> prompt(대화형 입력, ui에 의존) -> db/raw_store/config_loader/logger/ui(핵심 인프라)
+[[tool.importlinter.contracts]]
+name = "레이어 방향 강제 (위가 아래를 쓰고, 아래는 위를 모른다)"
+type = "layers"
+layers = [
+  "src.menu",
+  "src.cli",
+  "src.collector | src.cleaner | src.summarizer | src.analyzer | src.sentiment | src.reporter | src.exporter | src.viewer | src.setup",
+  "src.ai_client | src.visualizer",
+  "src.prompt",
+  "src.db | src.raw_store | src.config_loader | src.logger | src.ui",
+]

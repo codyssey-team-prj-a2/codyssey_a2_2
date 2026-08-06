@@ -1,0 +1,10 @@
+requests
+beautifulsoup4
+pandas
+matplotlib
+openpyxl
+python-dotenv
+rich
+google-genai
+feedparser
+questionary
