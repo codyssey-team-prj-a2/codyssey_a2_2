@@ -1,0 +1,39 @@
+{
+  "ai": {
+    "provider": "google",
+    "model": "gemini-3.5-flash-lite",
+    "request_delay_sec": 4.0
+  },
+  "duplicate_policy": "skip",
+  "request_delay_sec": 1.0,
+  "sources": [
+    {
+      "name": "google_news_it_rss",
+      "method": "rss",
+      "url": "https://news.google.com/rss/search?q=IT&hl=ko&gl=KR&ceid=KR:ko",
+      "category": "IT",
+      "enabled": true
+    },
+    {
+      "name": "hackernews_api",
+      "method": "api",
+      "url": "https://hacker-news.firebaseio.com/v0",
+      "category": "Tech",
+      "enabled": true
+    },
+    {
+      "name": "wikipedia_current_events_crawl",
+      "method": "crawl",
+      "url": "https://ko.wikipedia.org/wiki/%ED%8F%AC%ED%84%B8:%EC%B5%9C%EA%B7%BC_%EC%82%AC%EA%B1%B4",
+      "category": "종합",
+      "enabled": true
+    },
+    {
+      "name": "ArXiv cs.AI",
+      "method": "rss",
+      "url": "http://export.arxiv.org/rss/cs.AI",
+      "category": "AI",
+      "enabled": true
+    }
+  ]
+}
