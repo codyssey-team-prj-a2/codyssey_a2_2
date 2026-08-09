@@ -33,5 +33,5 @@ layers = [
   "src.collector | src.cleaner | src.summarizer | src.analyzer | src.sentiment | src.reporter | src.exporter | src.viewer | src.setup",
   "src.ai_client | src.visualizer",
   "src.prompt",
-  "src.db | src.raw_store | src.config_loader | src.logger | src.ui",
+  "src.db | src.raw_store | src.config_loader | src.logger | src.ui | src.normalize",
 ]

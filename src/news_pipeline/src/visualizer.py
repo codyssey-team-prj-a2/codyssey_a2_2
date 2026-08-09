@@ -6,15 +6,19 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib import font_manager
 
-from src import db
+from src import config_loader, db
 from src.logger import get_logger
 
 log = get_logger("visualizer")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-CHARTS_DIR = BASE_DIR / "reports" / "charts"
 
 _KOREAN_FONT_CANDIDATES = ["Malgun Gothic", "NanumGothic", "AppleGothic"]
+
+
+def _charts_dir() -> Path:
+    config = config_loader.load_config()
+    return BASE_DIR / config.get("report", {}).get("output_dir", "reports") / "charts"
 
 
 def _setup_korean_font() -> None:
@@ -38,8 +42,9 @@ def chart_category_distribution() -> Path:
     finally:
         conn.close()
 
-    CHARTS_DIR.mkdir(parents=True, exist_ok=True)
-    path = CHARTS_DIR / "category_distribution.png"
+    charts_dir = _charts_dir()
+    charts_dir.mkdir(parents=True, exist_ok=True)
+    path = charts_dir / "category_distribution.png"
     fig, ax = plt.subplots(figsize=(8, 5))
     if rows:
         categories = [r["category"] or "미분류" for r in rows]
@@ -65,8 +70,9 @@ def chart_daily_trend() -> Path:
     finally:
         conn.close()
 
-    CHARTS_DIR.mkdir(parents=True, exist_ok=True)
-    path = CHARTS_DIR / "daily_trend.png"
+    charts_dir = _charts_dir()
+    charts_dir.mkdir(parents=True, exist_ok=True)
+    path = charts_dir / "daily_trend.png"
     fig, ax = plt.subplots(figsize=(8, 5))
     if rows:
         days = [r["day"] for r in rows]
@@ -93,17 +99,24 @@ def chart_sentiment_distribution() -> Path:
     finally:
         conn.close()
 
-    CHARTS_DIR.mkdir(parents=True, exist_ok=True)
-    path = CHARTS_DIR / "sentiment_distribution.png"
-    fig, ax = plt.subplots(figsize=(6, 5))
+    charts_dir = _charts_dir()
+    charts_dir.mkdir(parents=True, exist_ok=True)
+    path = charts_dir / "sentiment_distribution.png"
+    fig, ax = plt.subplots(figsize=(6, 6))
     if rows:
         labels = [r["sentiment"] for r in rows]
         counts = [r["cnt"] for r in rows]
         colors = {"긍정": "#55A868", "부정": "#C44E52", "중립": "#8172B2"}
-        ax.bar(labels, counts, color=[colors.get(label, "#4C72B0") for label in labels])
+        ax.pie(
+            counts,
+            labels=labels,
+            colors=[colors.get(label, "#4C72B0") for label in labels],
+            autopct="%1.1f%%",
+            startangle=90,
+            counterclock=False,
+        )
+        ax.axis("equal")
     ax.set_title("뉴스 감성 분포")
-    ax.set_xlabel("감성")
-    ax.set_ylabel("건수")
     fig.tight_layout()
     fig.savefig(path)
     plt.close(fig)

@@ -2,36 +2,18 @@
 import re
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 
 from bs4 import BeautifulSoup
 
-from src import config_loader, db, raw_store, ui
+from src import config_loader, db, normalize, raw_store, ui
 from src.logger import get_logger
 
 log = get_logger("cleaner")
-
-TRACKING_PARAMS = {
-    "utm_source", "utm_medium", "utm_campaign", "utm_term",
-    "utm_content", "ref", "fbclid", "gclid",
-}
 
 
 def _normalize_text(text: str) -> str:
     text = BeautifulSoup(text, "html.parser").get_text(" ")
     return re.sub(r"\s+", " ", text).strip()
-
-
-def _normalize_url(url: str) -> str:
-    parsed = urlparse(url.strip())
-    query = [(k, v) for k, v in parse_qsl(parsed.query) if k.lower() not in TRACKING_PARAMS]
-    normalized = parsed._replace(
-        scheme=parsed.scheme.lower(),
-        netloc=parsed.netloc.lower(),
-        query=urlencode(query),
-        fragment="",
-    )
-    return urlunparse(normalized)
 
 
 def _normalize_date(published_at: str | None, collected_at: str) -> str:
@@ -53,7 +35,7 @@ def _normalize_date(published_at: str | None, collected_at: str) -> str:
 def run_clean(policy: str | None = None) -> None:
     db.init_db()
     config = config_loader.load_config()
-    policy = policy or config.get("duplicate_policy", "skip")
+    policy = policy or config.get("fetch", {}).get("duplicate_policy", "skip")
     if policy not in ("skip", "upsert"):
         ui.print_error(f"알 수 없는 중복 정책: {policy}")
         return
@@ -86,7 +68,7 @@ def run_clean(policy: str | None = None) -> None:
                 "category": raw.get("category", "종합"),
                 "title": _normalize_text(title),
                 "content": _normalize_text(content),
-                "url": _normalize_url(url),
+                "url": normalize.normalize_url(url),
                 "published_at": _normalize_date(raw.get("published_at"), collected_at),
                 "collected_at": collected_at,
                 "cleaned_at": datetime.now(timezone.utc).isoformat(),

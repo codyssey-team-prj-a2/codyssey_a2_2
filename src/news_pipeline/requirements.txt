@@ -6,5 +6,7 @@ openpyxl
 python-dotenv
 rich
 google-genai
+openai
+anthropic
 feedparser
 questionary

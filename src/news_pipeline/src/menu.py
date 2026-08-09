@@ -121,7 +121,7 @@ def _run_submenu(
 
 # ── 뉴스 수집 ────────────────────────────────────────────────────────────
 def _do_fetch() -> None:
-    sources = config_loader.load_config().get("sources", [])
+    sources = config_loader.load_config().get("news_sources", [])
     choices = [("all", "전체")] + [(s["name"], f"{s['name']} ({s['method']})") for s in sources]
     source = _select_or_cancel("수집할 소스를 고르세요", choices)
     limit = prompt.ask_int("수집 건수", default=20)
@@ -230,7 +230,11 @@ def _do_export() -> None:
         back_label="전체(필터 없음)",
     )
     status = None if status_choice == BACK else status_choice
-    cli.cmd_export(Namespace(format=fmt, status=status))
+    date_from = prompt.ask_text("시작일 (YYYY-MM-DD, 생략 가능)", default="")
+    date_to = prompt.ask_text("종료일 (YYYY-MM-DD, 생략 가능)", default="")
+    cli.cmd_export(Namespace(
+        format=fmt, status=status, date_from=date_from or None, date_to=date_to or None
+    ))
 
 
 def _menu_export() -> None:
@@ -240,37 +244,46 @@ def _menu_export() -> None:
 
 
 # ── 소스/설정 관리 (자체 반복 메뉴라 별도 구조 유지) ──────────────────────
+def _do_remove_source() -> None:
+    sources = config_loader.load_config().get("news_sources", [])
+    if not sources:
+        ui.print_warning("등록된 소스가 없습니다.")
+        return
+    name = _select_or_cancel(
+        "삭제할 소스를 고르세요",
+        [(s["name"], f"{s['name']} ({s['method']})") for s in sources],
+    )
+    setup_mod.remove_source(name)
+
+
+CONFIG_ACTIONS = {
+    "set_key": setup_mod.set_api_key,
+    "add_source": setup_mod.add_source,
+    "list_sources": setup_mod.list_sources,
+    "remove_source": _do_remove_source,
+    "set_db_path": setup_mod.set_db_path,
+    "set_log": setup_mod.set_log_config,
+}
+
+
 def _menu_config() -> None:
     while True:
         _show_context("소스/설정 관리")
         choice = prompt.ask_select(
             "무엇을 할까요?",
             [
-                ("set_key", "API 키 등록"),
+                ("set_key", "AI 플랫폼/모델/API 키 등록"),
                 ("add_source", "소스 추가"),
                 ("list_sources", "소스 목록"),
                 ("remove_source", "소스 삭제"),
+                ("set_db_path", "DB 저장 폴더 경로 설정"),
+                ("set_log", "로그 폴더 경로/기록 수준 설정"),
             ],
         )
         if choice == BACK:
             return
         try:
-            if choice == "set_key":
-                setup_mod.set_api_key()
-            elif choice == "add_source":
-                setup_mod.add_source()
-            elif choice == "list_sources":
-                setup_mod.list_sources()
-            elif choice == "remove_source":
-                sources = config_loader.load_config().get("sources", [])
-                if not sources:
-                    ui.print_warning("등록된 소스가 없습니다.")
-                else:
-                    name = _select_or_cancel(
-                        "삭제할 소스를 고르세요",
-                        [(s["name"], f"{s['name']} ({s['method']})") for s in sources],
-                    )
-                    setup_mod.remove_source(name)
+            CONFIG_ACTIONS[choice]()
         except Cancelled:
             ui.print_warning("취소했습니다.")
         _pause()

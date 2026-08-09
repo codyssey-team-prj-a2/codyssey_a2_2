@@ -12,13 +12,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="main.py", description="뉴스 AI 파이프라인 CLI")
     sub = parser.add_subparsers(dest="command")
 
-    config_p = sub.add_parser("config", help="소스/API 키 설정 관리")
+    config_p = sub.add_parser("config", help="소스/API 키/저장 경로 설정 관리")
     config_sub = config_p.add_subparsers(dest="config_command")
-    config_sub.add_parser("set-api-key", help="AI API 키 등록")
+    config_sub.add_parser("set-api-key", help="AI 플랫폼/모델/API 키 등록")
     config_sub.add_parser("add-source", help="뉴스 소스 등록")
     config_sub.add_parser("list", help="등록된 소스 목록")
     remove_p = config_sub.add_parser("remove", help="소스 삭제")
     remove_p.add_argument("--name", required=True)
+    config_sub.add_parser("set-db-path", help="DB 저장 폴더 경로 설정")
+    config_sub.add_parser("set-log", help="로그 저장 폴더 경로 및 기록 수준 설정")
 
     fetch_p = sub.add_parser("fetch", help="뉴스 수집")
     fetch_p.add_argument("--source", default="all")
@@ -50,6 +52,8 @@ def build_parser() -> argparse.ArgumentParser:
     export_p = sub.add_parser("export", help="데이터 내보내기")
     export_p.add_argument("--format", choices=["csv", "jsonl", "excel"], required=True)
     export_p.add_argument("--status", default=None)
+    export_p.add_argument("--date-from", dest="date_from", default=None)
+    export_p.add_argument("--date-to", dest="date_to", default=None)
 
     list_p = sub.add_parser("list", help="[보너스] 뉴스 목록 조회")
     list_p.add_argument("--category", default=None)
@@ -90,8 +94,15 @@ def cmd_config(args) -> None:
         setup_mod.list_sources()
     elif args.config_command == "remove":
         setup_mod.remove_source(args.name)
+    elif args.config_command == "set-db-path":
+        setup_mod.set_db_path()
+    elif args.config_command == "set-log":
+        setup_mod.set_log_config()
     else:
-        ui.print_warning("config 서브커맨드를 지정하세요 (set-api-key/add-source/list/remove)")
+        ui.print_warning(
+            "config 서브커맨드를 지정하세요 "
+            "(set-api-key/add-source/list/remove/set-db-path/set-log)"
+        )
 
 
 def cmd_fetch(args) -> None:
@@ -154,7 +165,7 @@ def cmd_export(args) -> None:
     except ImportError:
         ui.print_warning("export 기능은 아직 구현되지 않았습니다 (Phase 9 예정)")
         return
-    run_export(fmt=args.format, status=args.status)
+    run_export(fmt=args.format, status=args.status, date_from=args.date_from, date_to=args.date_to)
 
 
 def cmd_list(args) -> None:

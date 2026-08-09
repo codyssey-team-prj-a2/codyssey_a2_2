@@ -1,10 +1,13 @@
 """analyze: 기간/카테고리별 뉴스를 종합해 AI 인사이트(트렌드/키워드/시사점)를 산출한다."""
 import json
+from datetime import datetime, timedelta
 
 from src import ai_client, db, prompt, ui
 from src.logger import get_logger
 
 log = get_logger("analyzer")
+
+DEFAULT_RANGE_DAYS = 7
 
 SYSTEM_PROMPT = (
     "당신은 데이터 분석가입니다. 아래는 특정 기간/카테고리에 수집된 뉴스\n"
@@ -61,10 +64,17 @@ def run_history(limit: int = 20) -> None:
 
 def run_analyze(date_from: str | None, date_to: str | None, category: str | None) -> None:
     if not ai_client.has_api_key():
-        ui.print_error(
-            "Gemini API 키가 설정되지 않았습니다. `config set-api-key`로 먼저 등록하세요."
-        )
+        ui.print_error("AI API 키가 설정되지 않았습니다. `config set-api-key`로 먼저 등록하세요.")
         return
+
+    # 기간 미지정 시 전체 DB를 스캔하지 않도록 최근 7일로 제한한다.
+    if not date_from and not date_to:
+        date_to = datetime.now().strftime("%Y-%m-%d")
+        date_from = (datetime.now() - timedelta(days=DEFAULT_RANGE_DAYS)).strftime("%Y-%m-%d")
+        ui.print_info(
+            f"기간 미지정 → 최근 {DEFAULT_RANGE_DAYS}일 기본 적용: {date_from} ~ {date_to}"
+        )
+
     db.init_db()
     rows = db.query_news(date_from=date_from, date_to=date_to, category=category)
     if not rows:

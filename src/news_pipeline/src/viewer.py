@@ -165,9 +165,7 @@ def pick_id(category: str | None = None, page_size: int = PAGE_SIZE_DEFAULT) -> 
 
     while True:
         offset = (page - 1) * page_size
-        rows = db.query_news(
-            category=category, order_by=db.ORDER_BY_ID_DESC, limit=page_size, offset=offset
-        )
+        rows = db.query_news(category=category, limit=page_size, offset=offset)
         table_rows = [
             [
                 r["id"], ui.category_badge(r["category"]), r["title"] or "",
@@ -176,7 +174,7 @@ def pick_id(category: str | None = None, page_size: int = PAGE_SIZE_DEFAULT) -> 
             for r in rows
         ]
         ui.print_table(
-            f"뉴스 목록 - ID 최신순 (페이지 {page}/{total_pages}, 총 {total}건)",
+            f"뉴스 목록 - 발행일 최신순 (페이지 {page}/{total_pages}, 총 {total}건)",
             ["ID", "카테고리", "제목", "발행일", "요약"],
             table_rows,
         )

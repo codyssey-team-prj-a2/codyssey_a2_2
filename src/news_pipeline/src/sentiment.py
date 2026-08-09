@@ -28,7 +28,7 @@ def run_sentiment(
 ) -> None:
     if not ai_client.has_api_key():
         ui.print_error(
-            "Gemini API 키가 설정되지 않았습니다. `config set-api-key`로 먼저 등록하세요."
+            "AI API 키가 설정되지 않았습니다. `config set-api-key`로 먼저 등록하세요."
         )
         return
     db.init_db()

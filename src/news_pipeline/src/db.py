@@ -3,7 +3,14 @@ import sqlite3
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = BASE_DIR / "data" / "news.db"
+DB_PATH = BASE_DIR / "data" / "news_pipeline.db"
+
+
+def configure(db_path: str | None) -> None:
+    """main.py가 기동 시 config.json의 storage.db_path로 덮어쓰기 위해 호출한다."""
+    global DB_PATH
+    if db_path:
+        DB_PATH = BASE_DIR / db_path
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS news (
@@ -144,10 +151,17 @@ def build_filter_sql(  # noqa: PLR0913 -- query_news/count_news가 공유하는 
 
 
 # 문자열을 그대로 SQL에 꽂지 않도록, 허용된 정렬 기준만 화이트리스트로 관리한다.
+# 목록 화면(list/browse)은 "발행일" 컬럼을 보여주므로, 기본 정렬도 그 컬럼(published_at)
+# 기준 최신순이어야 화면에 보이는 날짜가 뒤죽박죽으로 보이지 않는다.
+# published_at이 초 단위까지 완전히 같은 기사가 실제로 존재하는데(같은 배치로 수집된
+# 크롤링 기사 등), 1차 기준만 있으면 동점 안에서의 순서를 SQLite가 보장하지 않아
+# id가 뒤섞여 보인다. 그래서 항상 id DESC를 2차 기준으로 붙여 동점을 없앤다.
+ORDER_BY_PUBLISHED_DESC = "published_at_desc"
 ORDER_BY_COLLECTED_DESC = "collected_at_desc"
 ORDER_BY_ID_DESC = "id_desc"
 _ORDER_BY_SQL = {
-    ORDER_BY_COLLECTED_DESC: "collected_at DESC",
+    ORDER_BY_PUBLISHED_DESC: "published_at DESC, id DESC",
+    ORDER_BY_COLLECTED_DESC: "collected_at DESC, id DESC",
     ORDER_BY_ID_DESC: "id DESC",
 }
 
@@ -159,12 +173,12 @@ def query_news(  # noqa: PLR0913 -- 조회 필터 함수라 옵션 인자가 많
     keyword: str | None = None,
     status: str | None = None,
     sentiment: str | None = None,
-    order_by: str = ORDER_BY_COLLECTED_DESC,
+    order_by: str = ORDER_BY_PUBLISHED_DESC,
     limit: int | None = None,
     offset: int = 0,
 ) -> list[sqlite3.Row]:
     where_sql, params = build_filter_sql(date_from, date_to, category, keyword, status, sentiment)
-    order_sql = _ORDER_BY_SQL.get(order_by, _ORDER_BY_SQL[ORDER_BY_COLLECTED_DESC])
+    order_sql = _ORDER_BY_SQL.get(order_by, _ORDER_BY_SQL[ORDER_BY_PUBLISHED_DESC])
     sql = "SELECT * FROM news WHERE 1=1" + where_sql + " ORDER BY " + order_sql
     if limit is not None:
         sql += " LIMIT ? OFFSET ?"
@@ -212,6 +226,19 @@ def insert_analysis_result(  # noqa: PLR0913 -- 분석 결과의 각 필드를 �
         conn.close()
 
 
+def count_existing_urls(urls: list[str]) -> int:
+    """주어진 url 목록 중 이미 news 테이블에 존재하는 건수를 센다 (중복 수집 방지율 집계용)."""
+    if not urls:
+        return 0
+    conn = get_connection()
+    try:
+        placeholders = ",".join("?" * len(urls))
+        cur = conn.execute(f"SELECT COUNT(*) FROM news WHERE url IN ({placeholders})", urls)
+        return cur.fetchone()[0]
+    finally:
+        conn.close()
+
+
 def list_categories() -> list[str]:
     conn = get_connection()
     try:
@@ -232,13 +259,30 @@ def get_latest_analysis() -> sqlite3.Row | None:
         conn.close()
 
 
-def list_analysis_results(limit: int | None = None) -> list[sqlite3.Row]:
+def list_analysis_results(  # noqa: PLR0913 -- 분석 이력 필터 함수라 옵션 인자가 많은 것이 자연스러움
+    date_from: str | None = None,
+    date_to: str | None = None,
+    category: str | None = None,
+    limit: int | None = None,
+) -> list[sqlite3.Row]:
+    sql = "SELECT * FROM analysis_results WHERE 1=1"
+    params: list = []
+    if date_from:
+        sql += " AND substr(created_at, 1, 10) >= ?"
+        params.append(date_from)
+    if date_to:
+        sql += " AND substr(created_at, 1, 10) <= ?"
+        params.append(date_to)
+    if category:
+        sql += " AND category = ?"
+        params.append(category)
+    sql += " ORDER BY id DESC"
+
     conn = get_connection()
     try:
-        sql = "SELECT * FROM analysis_results ORDER BY id DESC"
         if limit is not None:
-            return conn.execute(sql + " LIMIT ?", (limit,)).fetchall()
-        return conn.execute(sql).fetchall()
+            return conn.execute(sql + " LIMIT ?", params + [limit]).fetchall()
+        return conn.execute(sql, params).fetchall()
     finally:
         conn.close()
 

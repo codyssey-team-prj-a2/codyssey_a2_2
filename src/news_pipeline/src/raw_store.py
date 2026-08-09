@@ -6,6 +6,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 RAW_DIR = BASE_DIR / "data" / "raw"
 
 
+def configure(raw_dir: str | None) -> None:
+    """main.py가 기동 시 config.json의 storage.raw_dir로 덮어쓰기 위해 호출한다."""
+    global RAW_DIR
+    if raw_dir:
+        RAW_DIR = BASE_DIR / raw_dir
+
+
 def _path_for(source_name: str) -> Path:
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     return RAW_DIR / f"{source_name}.jsonl"

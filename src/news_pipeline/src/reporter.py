@@ -1,17 +1,23 @@
 """report: 품질 지표 + TOP N 집계 + AI 인사이트를 콘솔/파일(txt·md)로 출력한다."""
 import json
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src import db, prompt, raw_store, ui, visualizer
+from src import config_loader, db, normalize, prompt, raw_store, ui, visualizer
 from src.logger import get_logger
 
 log = get_logger("reporter")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-REPORTS_DIR = BASE_DIR / "reports"
 
-TOP_N = 5
+TOP_CATEGORIES_N = 3
+TOP_KEYWORDS_N = 5
+
+
+def _reports_dir() -> Path:
+    config = config_loader.load_config()
+    return BASE_DIR / config.get("report", {}).get("output_dir", "reports")
 
 
 def _raw_matches(record: dict, date_from, date_to, category) -> bool:
@@ -39,18 +45,30 @@ def _gather(date_from: str | None, date_to: str | None, category: str | None) ->
     clean_rate = (clean_total / raw_total * 100) if raw_total else 0.0
     summarize_rate = (summarized_total / clean_total * 100) if clean_total else 0.0
 
+    # 중복 수집 방지율: raw_records 중 이미 clean DB에 있는 URL 비율.
+    # (같은 raw 배치 안에서 서로 중복인 URL끼리는 셈에서 빠짐 — clean 단계처럼 순차 처리하며
+    #  DB에 즉시 반영하는 방식이 아니라 report 시점의 스냅샷 대조라 생기는 근사치.)
+    normalized_urls = [normalize.normalize_url(r["url"]) for r in raw_records if r.get("url")]
+    duplicate_total = db.count_existing_urls(normalized_urls)
+    duplicate_rate = (duplicate_total / raw_total * 100) if raw_total else 0.0
+
     where_sql, params = db.build_filter_sql(date_from, date_to, category, None, None, None)
     conn = db.get_connection()
     try:
         top_categories = conn.execute(
             "SELECT category, COUNT(*) AS cnt FROM news WHERE 1=1" + where_sql +
             " GROUP BY category ORDER BY cnt DESC LIMIT ?",
-            params + [TOP_N],
+            params + [TOP_CATEGORIES_N],
         ).fetchall()
     finally:
         conn.close()
 
     latest_analysis = db.get_latest_analysis()
+
+    keyword_counter = Counter()
+    for row in db.list_analysis_results(date_from=date_from, date_to=date_to, category=category):
+        keyword_counter.update(json.loads(row["keywords"] or "[]"))
+    top_keywords = keyword_counter.most_common(TOP_KEYWORDS_N)
 
     scope = []
     if date_from or date_to:
@@ -66,7 +84,10 @@ def _gather(date_from: str | None, date_to: str | None, category: str | None) ->
         "summarized_total": summarized_total,
         "clean_rate": clean_rate,
         "summarize_rate": summarize_rate,
+        "duplicate_total": duplicate_total,
+        "duplicate_rate": duplicate_rate,
         "top_categories": [(r["category"] or "미분류", r["cnt"]) for r in top_categories],
+        "top_keywords": top_keywords,
         "latest_analysis": latest_analysis,
     }
 
@@ -74,6 +95,7 @@ def _gather(date_from: str | None, date_to: str | None, category: str | None) ->
 def _render_md(data: dict, chart_paths: list[Path]) -> str:
     clean_detail = f"raw {data['raw_total']}건 중 clean {data['clean_total']}건"
     summarize_detail = f"clean {data['clean_total']}건 중 {data['summarized_total']}건 요약"
+    duplicate_detail = f"raw {data['raw_total']}건 중 중복 판정 {data['duplicate_total']}건"
     lines = [
         "# 뉴스 AI 파이프라인 리포트",
         f"생성일시: {data['generated_at']}",
@@ -82,11 +104,19 @@ def _render_md(data: dict, chart_paths: list[Path]) -> str:
         "## 품질 지표",
         f"- 정제율: {data['clean_rate']:.1f}% ({clean_detail})",
         f"- 요약 완료율: {data['summarize_rate']:.1f}% ({summarize_detail})",
+        f"- 중복 수집 방지율: {data['duplicate_rate']:.1f}% ({duplicate_detail})",
         "",
-        f"## TOP {TOP_N} 카테고리",
+        f"## TOP {TOP_CATEGORIES_N} 카테고리",
     ]
     for i, (cat, cnt) in enumerate(data["top_categories"], start=1):
         lines.append(f"{i}. {cat} - {cnt}건")
+
+    lines += ["", f"## TOP {TOP_KEYWORDS_N} 핵심 키워드"]
+    if data["top_keywords"]:
+        for i, (kw, cnt) in enumerate(data["top_keywords"], start=1):
+            lines.append(f"{i}. {kw} - {cnt}회")
+    else:
+        lines.append("아직 analyze 명령을 실행하지 않았습니다.")
 
     lines += ["", "## AI 인사이트 (최근 분석 결과)"]
     if data["latest_analysis"]:
@@ -106,6 +136,7 @@ def _render_md(data: dict, chart_paths: list[Path]) -> str:
 def _render_txt(data: dict, chart_paths: list[Path]) -> str:
     clean_detail = f"raw {data['raw_total']}건 중 clean {data['clean_total']}건"
     summarize_detail = f"clean {data['clean_total']}건 중 {data['summarized_total']}건 요약"
+    duplicate_detail = f"raw {data['raw_total']}건 중 중복 판정 {data['duplicate_total']}건"
     lines = [
         "=== 뉴스 AI 파이프라인 리포트 ===",
         f"생성일시: {data['generated_at']}",
@@ -114,11 +145,19 @@ def _render_txt(data: dict, chart_paths: list[Path]) -> str:
         "[품질 지표]",
         f"정제율: {data['clean_rate']:.1f}% ({clean_detail})",
         f"요약 완료율: {data['summarize_rate']:.1f}% ({summarize_detail})",
+        f"중복 수집 방지율: {data['duplicate_rate']:.1f}% ({duplicate_detail})",
         "",
-        f"[TOP {TOP_N} 카테고리]",
+        f"[TOP {TOP_CATEGORIES_N} 카테고리]",
     ]
     for i, (cat, cnt) in enumerate(data["top_categories"], start=1):
         lines.append(f"{i}. {cat} - {cnt}건")
+
+    lines += ["", f"[TOP {TOP_KEYWORDS_N} 핵심 키워드]"]
+    if data["top_keywords"]:
+        for i, (kw, cnt) in enumerate(data["top_keywords"], start=1):
+            lines.append(f"{i}. {kw} - {cnt}회")
+    else:
+        lines.append("아직 analyze 명령을 실행하지 않았습니다.")
 
     lines += ["", "[AI 인사이트]"]
     if data["latest_analysis"]:
@@ -148,12 +187,13 @@ def run_report(
 
     ui.print_panel(content, title="리포트 미리보기")
 
-    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    reports_dir = _reports_dir()
+    reports_dir.mkdir(parents=True, exist_ok=True)
     if output:
         out_path = Path(output)
     else:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        out_path = REPORTS_DIR / f"report_{ts}.{fmt}"
+        out_path = reports_dir / f"report_{ts}.{fmt}"
     out_path.write_text(content, encoding="utf-8")
 
     log.info(f"리포트 생성: {out_path}")
@@ -162,7 +202,9 @@ def run_report(
 
 def run_history() -> None:
     """생성된 리포트 파일 목록을 화면 번호로 골라 내용을 볼 수 있게 한다."""
-    files = sorted(REPORTS_DIR.glob("report_*.*"), key=lambda p: p.stat().st_mtime, reverse=True)
+    files = sorted(
+        _reports_dir().glob("report_*.*"), key=lambda p: p.stat().st_mtime, reverse=True
+    )
     if not files:
         ui.print_warning("아직 생성된 리포트가 없습니다.")
         return

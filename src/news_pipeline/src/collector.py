@@ -12,7 +12,7 @@ from src.logger import get_logger
 
 log = get_logger("collector")
 
-HTTP_TIMEOUT = 10
+DEFAULT_TIMEOUT = 10
 USER_AGENT = "news-pipeline-edu-project/0.1 (learning purpose)"
 HN_BASE = "https://hacker-news.firebaseio.com/v0"
 
@@ -22,10 +22,10 @@ def _now_iso() -> str:
 
 
 def fetch_via_rss(
-    source: dict, limit: int, delay: float = 0.0, progress_cb=None
+    source: dict, limit: int, delay: float = 0.0, timeout: int = DEFAULT_TIMEOUT, progress_cb=None
 ) -> tuple[list[dict], int]:
     try:
-        resp = requests.get(source["url"], timeout=HTTP_TIMEOUT, headers={"User-Agent": USER_AGENT})
+        resp = requests.get(source["url"], timeout=timeout, headers={"User-Agent": USER_AGENT})
         resp.raise_for_status()
     except requests.RequestException as e:
         log.warning(f"[rss] {source['name']} 요청 실패: {e}")
@@ -53,10 +53,10 @@ def fetch_via_rss(
 
 
 def fetch_via_api(
-    source: dict, limit: int, delay: float = 1.0, progress_cb=None
+    source: dict, limit: int, delay: float = 1.0, timeout: int = DEFAULT_TIMEOUT, progress_cb=None
 ) -> tuple[list[dict], int]:
     try:
-        resp = requests.get(f"{HN_BASE}/topstories.json", timeout=HTTP_TIMEOUT)
+        resp = requests.get(f"{HN_BASE}/topstories.json", timeout=timeout)
         resp.raise_for_status()
         story_ids = resp.json()[:limit]
     except requests.RequestException as e:
@@ -67,7 +67,7 @@ def fetch_via_api(
     fail = 0
     for story_id in story_ids:
         try:
-            item_resp = requests.get(f"{HN_BASE}/item/{story_id}.json", timeout=HTTP_TIMEOUT)
+            item_resp = requests.get(f"{HN_BASE}/item/{story_id}.json", timeout=timeout)
             item_resp.raise_for_status()
             item = item_resp.json() or {}
         except requests.RequestException as e:
@@ -114,10 +114,10 @@ def _parse_relative_date(text: str) -> str | None:
 
 
 def fetch_via_crawl(
-    source: dict, limit: int, delay: float = 0.0, progress_cb=None
+    source: dict, limit: int, delay: float = 0.0, timeout: int = DEFAULT_TIMEOUT, progress_cb=None
 ) -> tuple[list[dict], int]:
     try:
-        resp = requests.get(source["url"], timeout=HTTP_TIMEOUT, headers={"User-Agent": USER_AGENT})
+        resp = requests.get(source["url"], timeout=timeout, headers={"User-Agent": USER_AGENT})
         resp.raise_for_status()
     except requests.RequestException as e:
         log.warning(f"[crawl] {source['name']} 요청 실패: {e}")
@@ -163,7 +163,7 @@ METHOD_HANDLERS = {"rss": fetch_via_rss, "api": fetch_via_api, "crawl": fetch_vi
 
 def run_fetch(source_name: str = "all", limit: int = 20) -> None:
     config = config_loader.load_config()
-    sources = config.get("sources", [])
+    sources = config.get("news_sources", [])
     if not sources:
         ui.print_warning("등록된 소스가 없습니다. config add-source 로 먼저 추가하세요.")
         return
@@ -176,7 +176,9 @@ def run_fetch(source_name: str = "all", limit: int = 20) -> None:
         ui.print_error(f"'{source_name}' 이름의 활성화된 소스를 찾을 수 없습니다.")
         return
 
-    delay = config.get("request_delay_sec", 1.0)
+    fetch_cfg = config.get("fetch", {})
+    delay = fetch_cfg.get("request_delay_sec", 1.0)
+    timeout = fetch_cfg.get("timeout_sec", DEFAULT_TIMEOUT)
     result_rows = []
 
     with ui.progress_bar() as progress:
@@ -198,10 +200,10 @@ def run_fetch(source_name: str = "all", limit: int = 20) -> None:
 
             if src["method"] == "api":
                 records, fail = handler(
-                    src, limit, delay, progress_cb=lambda: progress.advance(task_id)
+                    src, limit, delay, timeout, progress_cb=lambda: progress.advance(task_id)
                 )
             else:
-                records, fail = handler(src, limit, delay)
+                records, fail = handler(src, limit, delay, timeout)
                 progress.update(task_id, completed=1)
 
             for record in records:

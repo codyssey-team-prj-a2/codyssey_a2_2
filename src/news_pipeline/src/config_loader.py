@@ -10,10 +10,12 @@ CONFIG_PATH = BASE_DIR / "config.json"
 ENV_PATH = BASE_DIR / ".env"
 
 DEFAULT_CONFIG = {
-    "ai": {"provider": "google", "model": "gemini-2.5-flash", "request_delay_sec": 4.0},
-    "duplicate_policy": "skip",
-    "request_delay_sec": 1.0,
-    "sources": [],
+    "news_sources": [],
+    "storage": {"db_path": "data/news_pipeline.db", "raw_dir": "data/raw"},
+    "fetch": {"duplicate_policy": "skip", "timeout_sec": 10, "request_delay_sec": 1.0},
+    "ai": {"max_tokens": 500, "request_delay_sec": 4.0},
+    "report": {"output_dir": "reports"},
+    "logging": {"level": "INFO", "file": "logs/app.log"},
 }
 
 
