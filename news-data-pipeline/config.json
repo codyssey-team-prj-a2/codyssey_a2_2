@@ -1,0 +1,21 @@
+{
+    "duplicate_policy": "skip",
+    "http_timeout_seconds": 10,
+    "crawl_delay_seconds": 1.5,
+    "user_agent": "news-data-pipeline/1.0 (educational project; contact: virtual.esq@gmail.com)",
+    "max_content_length": 5000,
+    "openai_model": "gpt-4.1",
+    "rss_sources": [
+        {
+            "name": "Yonhap IT/Science",
+            "url": "https://www.yonhapnewstv.co.kr/browse/feed/",
+            "category": "technology"
+        },
+        {
+            "name": "Hankyoreh Economy",
+            "url": "https://www.hani.co.kr/rss/economy/",
+            "category": "economy"
+        }
+    ],
+    "crawl_targets": []
+}

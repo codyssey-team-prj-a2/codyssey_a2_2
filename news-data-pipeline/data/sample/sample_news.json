@@ -1,0 +1,92 @@
+[
+    {
+        "title": "AI 반도체 수요 급증, 국내 기업 수혜 전망",
+        "description": "글로벌 AI 반도체 수요가 급증하면서 국내 반도체 기업들의 실적 개선이 기대된다.",
+        "content": "글로벌 AI 반도체 수요가 급증하면서 국내 반도체 기업들의 실적 개선이 기대된다. 업계 전문가들은 데이터센터 투자 확대와 함께 관련 매출이 크게 늘어날 것으로 전망했다. 다만 공급망 불안정성은 여전히 변수로 꼽힌다.",
+        "url": "https://example.com/news/ai-semiconductor-demand",
+        "source": "샘플뉴스",
+        "category": "technology",
+        "published_at": "2026-08-01 09:00:00"
+    },
+    {
+        "title": "정부, 신재생에너지 투자 확대 발표",
+        "description": "정부가 2030년까지 신재생에너지 비중을 늘리기 위한 대규모 투자 계획을 발표했다.",
+        "content": "정부가 2030년까지 신재생에너지 비중을 늘리기 위한 대규모 투자 계획을 발표했다. 태양광과 풍력 발전 설비를 중심으로 예산이 집중 투입될 예정이며, 관련 산업 일자리 창출 효과도 기대된다.",
+        "url": "https://example.com/news/renewable-energy-investment",
+        "source": "샘플뉴스",
+        "category": "economy",
+        "published_at": "2026-08-02 10:30:00"
+    },
+    {
+        "title": "프로야구 정규시즌 순위 경쟁 치열",
+        "description": "프로야구 정규시즌 막바지 순위 경쟁이 치열하게 전개되고 있다.",
+        "content": "프로야구 정규시즌 막바지 순위 경쟁이 치열하게 전개되고 있다. 상위권 팀들의 승차가 1게임 차 이내로 좁혀지면서 마지막까지 결과를 예측하기 어려운 상황이다.",
+        "url": "https://example.com/news/baseball-standings",
+        "source": "샘플뉴스",
+        "category": "sports",
+        "published_at": "2026-08-03 18:00:00"
+    },
+    {
+        "title": "스마트폰 신제품 출시, 폴더블 시장 확대",
+        "description": "주요 제조사들이 신형 폴더블 스마트폰을 잇달아 출시하며 시장 경쟁이 심화되고 있다.",
+        "content": "주요 제조사들이 신형 폴더블 스마트폰을 잇달아 출시하며 시장 경쟁이 심화되고 있다. 화면 내구성과 가격 경쟁력이 소비자 선택의 핵심 요인으로 꼽힌다.",
+        "url": "https://example.com/news/foldable-phone-launch",
+        "source": "샘플뉴스",
+        "category": "technology",
+        "published_at": "2026-08-04 08:15:00"
+    },
+    {
+        "title": "국내 증시, 외국인 매수세에 상승 마감",
+        "description": "코스피가 외국인 투자자의 순매수에 힘입어 상승 마감했다.",
+        "content": "코스피가 외국인 투자자의 순매수에 힘입어 상승 마감했다. 반도체와 2차전지 관련주가 지수 상승을 이끌었으며, 거래대금도 전일 대비 크게 늘었다.",
+        "url": "https://example.com/news/stock-market-rally",
+        "source": "샘플뉴스",
+        "category": "economy",
+        "published_at": "2026-08-05 15:30:00"
+    },
+    {
+        "title": "여름철 폭염 지속, 온열질환 주의보 발령",
+        "description": "전국적으로 폭염이 지속되면서 온열질환 주의보가 발령됐다.",
+        "content": "전국적으로 폭염이 지속되면서 온열질환 주의보가 발령됐다. 보건당국은 야외활동을 자제하고 충분한 수분 섭취를 당부했다.",
+        "url": "https://example.com/news/heatwave-warning",
+        "source": "샘플뉴스",
+        "category": "society",
+        "published_at": "2026-08-06 12:00:00"
+    },
+    {
+        "title": "전기차 배터리 기술 혁신, 주행거리 대폭 향상",
+        "description": "국내 배터리 기업이 새로운 소재 기술을 적용해 전기차 주행거리를 크게 늘렸다.",
+        "content": "국내 배터리 기업이 새로운 소재 기술을 적용해 전기차 주행거리를 크게 늘렸다. 업계는 이번 기술이 전기차 대중화를 앞당길 것으로 기대하고 있다.",
+        "url": "https://example.com/news/ev-battery-innovation",
+        "source": "샘플뉴스",
+        "category": "technology",
+        "published_at": "2026-08-07 11:20:00"
+    },
+    {
+        "title": "축구 국가대표팀, 평가전서 완승",
+        "description": "축구 국가대표팀이 평가전에서 완승을 거두며 팬들의 기대를 높였다.",
+        "content": "축구 국가대표팀이 평가전에서 완승을 거두며 팬들의 기대를 높였다. 감독은 다음 경기에서도 공격적인 전술을 유지하겠다고 밝혔다.",
+        "url": "https://example.com/news/national-team-win",
+        "source": "샘플뉴스",
+        "category": "sports",
+        "published_at": "2026-08-08 20:00:00"
+    },
+    {
+        "title": "중앙은행, 기준금리 동결 결정",
+        "description": "중앙은행이 물가 안정과 경기 상황을 고려해 기준금리를 동결했다.",
+        "content": "중앙은행이 물가 안정과 경기 상황을 고려해 기준금리를 동결했다. 시장에서는 당분간 금리 동결 기조가 유지될 것이라는 전망이 우세하다.",
+        "url": "https://example.com/news/interest-rate-freeze",
+        "source": "샘플뉴스",
+        "category": "economy",
+        "published_at": "2026-08-09 09:45:00"
+    },
+    {
+        "title": "지역 축제 개최, 관광객 몰려",
+        "description": "지역 축제가 개최되며 많은 관광객이 몰려 지역 경제에 활기를 불어넣었다.",
+        "content": "지역 축제가 개최되며 많은 관광객이 몰려 지역 경제에 활기를 불어넣었다. 지자체는 이번 축제의 경제적 효과가 예년보다 클 것으로 분석했다.",
+        "url": "https://example.com/news/local-festival",
+        "source": "샘플뉴스",
+        "category": "society",
+        "published_at": "2026-08-09 14:10:00"
+    }
+]

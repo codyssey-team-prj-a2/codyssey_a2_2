@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+data/database/*.db
+logs/*.log
+reports/*.txt
+reports/*.md
+reports/*.csv
+reports/*.jsonl
+reports/*.xlsx
+.pytest_cache/
