@@ -27,17 +27,41 @@
 
 ---
 
+## 실행방법
+
+- cd src/
+- python3 main.py
+
+---
+
 ## 디렉토리 구조
 
-- documentation
-  - project - 프로젝트 진행 과정에 필요한 문서
-  - result - 산출물
-    - 요구사항 관련 산출물
-    - 필수 제출 산출물
-    - 테스트 시트
-  - test - 테스트시트
-- images - 캡쳐 이미지들
-- src - 개발 코드
+```text
+📦 project_root
+ ┣ 📂 documentation
+ ┃ ┣ 📂 project            # 프로젝트 진행 과정에 필요한 문서
+ ┃ ┗ 📂 result             # 산출물
+ ┃   ┣ 📜 요구사항 관련 산출물
+ ┃   ┣ 📜 필수 제출 산출물
+ ┃   ┗ 📜 테스트 시트
+ ┣ 📂 images               # 캡쳐 이미지들
+ ┣ 📂 src                  # 개발 코드
+ ┃ ┣ 📂 lib
+ ┃ ┃ ┣ 📂 system
+ ┃ ┃ ┃ ┣ 📜 config_mgr.py  # 환경 설정 제어
+ ┃ ┃ ┃ ┗ 📜 ui.py          # 기본 UI, 색상 등
+ ┃ ┃ ┣ 📂 common
+ ┃ ┃ ┃ ┗ 📜 helpers.py     # 서브메뉴 헤더 생성, 공통 입력 프롬프트 등
+ ┃ ┃ ┗ 📂 dev
+ ┃ ┃   ┣ 📜 fetch.py       # 2. 수집 메뉴 화면 및 로직
+ ┃ ┃   ┣ 📜 clean.py       # 3. 정제 메뉴 화면 및 로직
+ ┃ ┃   ┣ 📜 summarize.py   # 4. 요약 메뉴 화면 및 로직
+ ┃ ┃   ┣ 📜 analyze.py     # 5. 분석 메뉴 화면 및 로직
+ ┃ ┃   ┣ 📜 report.py      # 6. 리포트 메뉴 화면 및 로직
+ ┃ ┃   ┗ 📜 export.py      # 7. 데이터 내보내기 메뉴 및 로직
+ ┃ ┗ 📜 main.py            # 라우터
+ ┗ 📜 .gitignore           # Git 제외 설정
+```
 
 ---
 
@@ -59,3 +83,7 @@
 - 8-9 : 개별 수행, 로직 및 구조 확정
 - 10-12 : 집중 업무 수행
 - 13 : 최종 통합 테스트 수행 및 결과
+
+```
+
+```
