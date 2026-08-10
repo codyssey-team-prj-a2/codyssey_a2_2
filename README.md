@@ -47,6 +47,9 @@
  ┣ 📂 images               # 캡쳐 이미지들
  ┣ 📂 src                  # 개발 코드
  ┃ ┣ 📂 lib
+ ┃ ┃ ┣ 📂 db               # [신규] DB 관련 파일 모음
+ ┃ ┃ ┃ ┣ 📜 schema.sql     # [신규] 테이블 생성 쿼리 (DDL)
+ ┃ ┃ ┃ ┗ 📜 sqlite_mgr.py  # [신규] DB 연결 및 실행 제어 모듈
  ┃ ┃ ┣ 📂 system
  ┃ ┃ ┃ ┣ 📜 config_mgr.py  # 환경 설정 제어
  ┃ ┃ ┃ ┗ 📜 ui.py          # 기본 UI, 색상 등
