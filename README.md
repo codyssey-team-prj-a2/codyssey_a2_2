@@ -6,6 +6,27 @@
 
 ---
 
+## History
+
+8/10 23:40 - 각종 문서 업로드 (Staging)
+
+### staging 에 있는 내용을 dev-\* 로 가져오려면
+
+    * 본인이 하던 업무를 저장 git add/commit
+        * 만약에 commit 하기 애매하면 지우거나 git stash 로 잠깐 임시 저장소에 넣고 진행한다.
+    * git fetch origin (staging 의 최신 정보 가져오기)
+    * git pull origin staging  (staging 에 있는 정보 가져오기)
+
+### 작업한 내용을 staging 으로 옮기려면
+
+    * dev-* 각자 branch 에서 작업 후 (add/commit)
+    * staging 으로 branch 변경
+    * 누군가 staging 에 데이터를 업데이트 했을 수 있으니 git pull origin staging 으로 staging 동기화
+    * git merge dev-* 자신의 branch merge
+    * git push origin staging  으로 최종 반영
+
+---
+
 ## 디렉토리 구조
 
 - documentation
