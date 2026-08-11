@@ -19,4 +19,4 @@ def render_submenu_header(title, cli_usage, options_desc):
     
     print("\n" + "-" * (w-2))
     print("  대화형으로 파라미터를 입력하거나, 바로 [Enter]를 눌러 기본값으로 실행할 수 있습니다.")
-    print("  (뒤로 돌아가려면 입력창에 'p'를 입력하세요)\n")
+    print("  (뒤로 돌아가려면 입력창에 'P'를 입력하세요)\n")

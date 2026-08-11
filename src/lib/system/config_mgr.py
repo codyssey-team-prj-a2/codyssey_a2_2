@@ -4,11 +4,20 @@ import os
 CONFIG_FILE = "config.json"
 ENV_FILE = ".env"
 
+
 def load_config():
-    if not os.path.exists(CONFIG_FILE):
-        return {"setup_ai": False, "setup_news": False, "setup_log": False, "news_sources": []}
-    with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    """config.json 읽기 (빈 파일 또는 손상 시 예외 처리)"""
+    # CONFIG_FILE 변수 사용
+    if not os.path.exists(CONFIG_FILE) or os.path.getsize(CONFIG_FILE) == 0:
+        save_config({})
+        return {}
+        
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except json.JSONDecodeError:
+        save_config({})
+        return {}
 
 def save_config(config_data):
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f:

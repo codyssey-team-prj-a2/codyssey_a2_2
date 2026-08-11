@@ -1,0 +1,10 @@
+requests
+beautifulsoup4
+pandas
+matplotlib
+openpyxl
+python-dotenv
+google-genai
+openai
+anthropic
+feedparser
