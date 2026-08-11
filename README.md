@@ -8,7 +8,29 @@
 
 ## History
 
-8/10 23:40 - 각종 문서 업로드 (Staging)
+8/10 23:40 - 각종 문서 업로드 (Staging) 8/11 03:00 - ui 설계 및 코드 템플릿 업로드
+
+### 코드 템플릿 요점
+
+```
+main.py 는 라우터 기능만 함
+각 lib 모듈을 호출하는 것은 아래와 같이 동일한 함수명으로 되어 있음
+run_menu_show()
+
+AI 에게 코드 생성 요청시 아래 조건을 같이 넣어주세요.
+1. 파일명은 cli 명과 동일 clean -> lib/dev/clean.py
+2. clean.py 내에 run_menu_show() 를 꼭 생성
+3. 참고 파일은 lib/dev/fetch.py
+
+빠진 명령어는 추가해주면 됩니다.
+
+ if choice == '2': fetch.run_menu_show()
+            elif choice == '3': clean.run_menu_show()
+            elif choice == '4': summarize.run_menu_show()
+            elif choice == '5': analyze.run_menu_show()
+            elif choice == '6': report.run_menu_show()
+            elif choice == '7': export.run_menu_show()
+```
 
 ### staging 에 있는 내용을 dev-\* 로 가져오려면
 
