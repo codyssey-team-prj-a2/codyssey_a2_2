@@ -1,0 +1,19 @@
+{
+    "setup_step": 4,
+    "news_sources": [
+        {
+            "name": "",
+            "uri": ""
+        },
+        {
+            "name": "naver",
+            "uri": "test"
+        }
+    ],
+    "db_path": "./data",
+    "log_path": "./logs",
+    "log_level": "DEBUG",
+    "setup_log": true,
+    "setup_ai": true,
+    "setup_news": true
+}

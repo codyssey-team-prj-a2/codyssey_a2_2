@@ -1,0 +1,26 @@
+# /docker/docker-compose.yml
+services:
+  app:
+    build:
+      # 컨텍스트를 프로젝트 최상단(project_root)으로 지정
+      context: ..
+      # 빌드에 사용할 Dockerfile은 현재 폴더(docker) 안의 파일 지정
+      dockerfile: docker/Dockerfile
+
+    image: codyssey-app:latest
+    container_name: codyssey_pipeline
+
+    stdin_open: true
+    tty: true
+
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TERM=xterm-256color
+
+    volumes:
+      # 호스트의 상위 폴더(..)에 있는 디렉토리들을 컨테이너 내부로 연결
+      - ../src:/app/src
+      - ../data:/app/data
+      - ../logs:/app/logs
+      - ../.env:/app/src/.env
+      - ../config.json:/app/src/config.json
