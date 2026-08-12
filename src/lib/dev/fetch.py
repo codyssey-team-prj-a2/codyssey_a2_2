@@ -1,3 +1,4 @@
+# lib/dev/fetch.py
 import argparse
 import re
 import shlex
@@ -153,7 +154,7 @@ FETCH_HANDLERS = {"rss": fetch_via_rss, "crawl": fetch_via_crawl}
 
 def run_menu_show():
     """
-    설명 영역 / 메뉴 영역 / 명령어 입력 영역을 깔끔하게 분리하고,
+    설명 영역 / 등록된 피드 목록 / 메뉴 영역 / 명령어 입력 영역을 분리하고,
     번호 선택과 명령어 입력을 동시에 처리하는 메인 루프입니다.
     """
     while True:
@@ -161,13 +162,33 @@ def run_menu_show():
         w = ui.get_width()
         
         # ==========================================
-        # [1] 설명 영역 (가이드라인)
+        # [1] 상단 헤더 및 가이드라인
         # ==========================================
         ui.draw_header(" 뉴스 데이터 수집 (Fetch) 제어소 ")
-        print(f"{ui.FG}  아래 메뉴 번호를 선택하거나, CLI 명령어를 직접 입력하여 실행할 수 있습니다.\n")
+        print(f"{ui.FG}  현재 등록된 뉴스 피드 목록을 확인하고, 수집을 실행할 수 있습니다.\n")
         
         # ==========================================
-        # [2] 메뉴 영역
+        # [2] 등록된 뉴스 피드 정보 표시 영역 (신규 추가)
+        # ==========================================
+        config = config_mgr.load_config()
+        sources = config.get("news_sources", [])
+        
+        print(f"{ui.HL}  [ 현재 등록된 뉴스 피드 현황 ]{ui.FG}")
+        if not sources:
+            print("  (등록된 뉴스 소스가 없습니다. 환경 설정 메뉴에서 먼저 등록해주세요.)")
+        else:
+            for s in sources:
+                name = s.get("name", "이름없음")
+                method = (s.get("method") or "rss").upper()
+                url = s.get("url") or s.get("uri") or "URL 없음"
+                category = s.get("category", "종합")
+                status = "활성" if s.get("enabled", True) else "비활성"
+                print(f"  - [{name}] 방식: {method} | 카테고리: {category} | 상태: {status}")
+                print(f"    주소: {url}")
+        print()
+        
+        # ==========================================
+        # [3] 메뉴 영역
         # ==========================================
         print(f"{ui.HL}  [ 대화형 메뉴 ]{ui.FG}")
         print("  1. 뉴스 수집 실행 (대화형 파라미터 입력)")
@@ -176,19 +197,19 @@ def run_menu_show():
         
         print(f"{ui.HL}  [ CLI 직접 입력 예시 ]{ui.FG}")
         print("  fetch --source [소스명] [--limit 숫자]")
-        print("  (입력 예: fetch --source naver_it --limit 20)")
+        print("  (입력 예: fetch --source naver_it --limit 20 또는 fetch --source all)")
         
         print("-" * w)
         
         # ==========================================
-        # [3] 명령어 입력 영역 (CLI / TUI 공존 프롬프트)
+        # [4] 명령어 입력 영역 (CLI / TUI 공존 프롬프트)
         # ==========================================
         user_input = input(f"\n{ui.HL}Codyssey/fetch > {ui.FG}").strip()
         
         if not user_input:
             continue
             
-        # 3-1. 메뉴 번호 처리 (TUI 모드)
+        # 4-1. 메뉴 번호 처리 (TUI 모드)
         if user_input.lower() == 'p':
             break
         elif user_input == '1':
@@ -196,7 +217,7 @@ def run_menu_show():
         elif user_input == '2':
             show_data_status()
             
-        # 3-2. 명령어 직접 입력 처리 (CLI 모드)
+        # 4-2. 명령어 직접 입력 처리 (CLI 모드)
         elif user_input.startswith("fetch"):
             run_fetch_cli(user_input)
             
@@ -210,10 +231,7 @@ def run_fetch_cli(command_str):
     shlex로 쪼개서 argparse로 파싱하고 실행하는 함수.
     """
     try:
-        # 문자열을 리스트 형태로 쪼갬 (예: ['fetch', '--source', 'naver'])
         args_list = shlex.split(command_str)
-        
-        # 맨 앞의 'fetch'는 제외하고 파라미터만 파싱
         args, unknown = fetch_parser.parse_known_args(args_list[1:])
         
         if unknown:
@@ -224,12 +242,9 @@ def run_fetch_cli(command_str):
         source = args.source
         limit = args.limit
         
-        # 실제 실행부 호출
         execute_fetch_logic(source, limit, is_cli=True)
         
     except SystemExit:
-        # argparse는 필수 인자가 없으면 SystemExit을 발생시키며 꺼짐.
-        # 이를 잡아서 프로그램이 죽지 않고 돌아가게 처리함.
         print("\n[오류] 필수 파라미터가 누락되었습니다. '--source'를 반드시 포함하세요.")
         ui.pause("[Enter]를 눌러 돌아갑니다...")
     except Exception as e:
@@ -243,7 +258,7 @@ def run_fetch_interactive():
     print(f"\n{ui.HL}[ 대화형 뉴스 수집 설정 ]{ui.FG}")
     print("안내: 입력을 취소하고 메뉴로 돌아가려면 언제든 'q'를 입력하세요.\n")
     
-    source = ui.safe_input("▶ 수집할 소스명 입력 (필수, 예: naver_it) [q:취소]: ")
+    source = ui.safe_input("▶ 수집할 소스명 입력 (필수, 예: naver_it 또는 all) [q:취소]: ")
     if not source or source.lower() == 'q': return
     
     print("\n  [옵션 추천] '--limit' 파라미터 (미입력 시 기본값 50 적용)")
@@ -252,7 +267,6 @@ def run_fetch_interactive():
     
     limit_val = limit.strip() if limit.strip() else "50"
     
-    # 실제 실행부 호출
     execute_fetch_logic(source, limit_val, is_cli=False)
 
 def execute_fetch_logic(source, limit, is_cli=False):
