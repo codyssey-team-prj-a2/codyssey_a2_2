@@ -243,7 +243,7 @@ def _edit_api_key_wizard(cfg, curr_prov, curr_model, curr_key):
 
 
 # ----------------------------------------------------
-# 2. 뉴스 소스 관리 (Req 1~6 적용 완료)
+# 2. 뉴스 소스 관리
 # ----------------------------------------------------
 def _manage_news_sources(cfg):
     while True:
@@ -270,7 +270,6 @@ def _manage_news_sources(cfg):
         print("  2. 기존 뉴스 소스 수정")
         print("  3. 기존 뉴스 소스 삭제\n")
         
-        # Req 5: 프롬프트 옆에 (p: 상위 메뉴로 이동) 명시
         ui.draw_line("─")
         prompt_str = f"{ui.rl_color(ui.HL)}입력 (메뉴번호 / p: 상위 메뉴로 이동) > {ui.rl_color(ui.FG)}"
         choice = input(prompt_str).strip().lower()
@@ -287,12 +286,11 @@ def _manage_news_sources(cfg):
 
 
 def _add_source_action(cfg):
-    """신규 뉴스 소스 추가 (Req 1, 2, 3, 4, 5 적용)"""
+    """신규 뉴스 소스 추가"""
     ui.clear_screen()
     ui.draw_header(" 신규 뉴스 소스 추가 ")
     sources = cfg.get("news_sources", [])
     
-    # [1] 소스 이름 입력 (Req 1 적용)
     while True:
         print(f"\n{ui.FG}▶ 소스 이름을 입력하세요 (공백 불가, 예: naver_it_rss).")
         ui.draw_line("─")
@@ -321,7 +319,6 @@ def _add_source_action(cfg):
             
         break
 
-    # [2] 수집 방식 선택 (Req 2, 3 적용)
     while True:
         print()
         print(f"{ui.HL}  [ 수집 방식 선택 ]{ui.FG}")
@@ -344,7 +341,6 @@ def _add_source_action(cfg):
             print(f"\n{ui.ERR}[오류] 잘못된 선택입니다. 1~3 번호 중에서 선택해 주세요.{ui.FG}")
             ui.pause("다시 시도하려면 [Enter]를 누르세요...")
 
-    # [3] 주소(URI) 입력 (Req 2, 4 적용)
     while True:
         print()
         print(f"{ui.FG}▶ 주소 (URI)를 입력하세요.")
@@ -369,7 +365,6 @@ def _add_source_action(cfg):
             
         break
 
-    # [4] 카테고리 입력
     print()
     print(f"{ui.FG}▶ 카테고리를 입력하세요.")
     ui.draw_line("─")
@@ -383,7 +378,6 @@ def _add_source_action(cfg):
         
     category = cat_input if cat_input else "종합"
     
-    # 데이터 저장
     sources.append({
         "name": name,
         "method": method,
@@ -440,7 +434,6 @@ def _edit_source_action(cfg):
     curr_uri = target.get('uri') or target.get('url') or ''
     curr_cat = target.get('category', '종합')
     
-    # 1. 소스 이름 수정
     while True:
         print()
         print(f"{ui.FG}▶ 새 소스 이름을 입력하세요 (공백 불가).")
@@ -470,7 +463,6 @@ def _edit_source_action(cfg):
         final_name = new_name
         break
 
-    # 2. 수집 방식 수정
     while True:
         print()
         print(f"{ui.HL}  [ 수집 방식 선택 ]{ui.FG}")
@@ -498,7 +490,6 @@ def _edit_source_action(cfg):
             print(f"\n{ui.ERR}[오류] 잘못된 선택입니다. 1~3 번호 중에서 선택해 주세요.{ui.FG}")
             ui.pause("다시 시도하려면 [Enter]를 누르세요...")
 
-    # 3. 주소(URI) 수정
     while True:
         print()
         print(f"{ui.FG}▶ 새 주소 (URI)를 입력하세요.")
@@ -523,7 +514,6 @@ def _edit_source_action(cfg):
         final_uri = new_uri
         break
 
-    # 4. 카테고리 수정
     print()
     print(f"{ui.FG}▶ 새 카테고리를 입력하세요.")
     ui.draw_line("─")
@@ -537,7 +527,6 @@ def _edit_source_action(cfg):
         
     final_cat = new_cat if new_cat else curr_cat
 
-    # 데이터 업데이트
     target.update({
         "name": final_name,
         "method": final_method,
@@ -551,7 +540,7 @@ def _edit_source_action(cfg):
 
 
 def _delete_source_action(cfg):
-    """기존 뉴스 소스 삭제 (Req 6 Y/N 절차 추가)"""
+    """기존 뉴스 소스 삭제"""
     sources = cfg.get("news_sources", [])
     if not sources:
         print(f"\n{ui.ERR}삭제할 뉴스 소스가 없습니다.{ui.FG}")
@@ -589,7 +578,6 @@ def _delete_source_action(cfg):
     target = sources[idx]
     target_name = target.get("name", "이름없음")
     
-    # Req 6: Y/N 확인 절차
     print()
     ui.draw_line("─")
     confirm_prompt = f"{ui.FG}▶ 정말로 [{ui.HL}{target_name}{ui.FG}] 소스를 삭제하시겠습니까? (y/n) > {ui.rl_color(ui.HL)}"
@@ -606,26 +594,58 @@ def _delete_source_action(cfg):
 
 
 # ----------------------------------------------------
-# 3. DB 저장 폴더 경로 설정
+# 3. DB 저장 폴더 경로 설정 (Req 1, 2, 3, 4 완벽 적용)
 # ----------------------------------------------------
 def _set_db_path(cfg):
     ui.clear_screen()
-    ui.draw_header("DB 저장 폴더 경로 설정")
+    ui.draw_header(" DB 저장 폴더 경로 설정 ")
     
     storage = cfg.setdefault("storage", {})
-    curr_path = storage.get("db_path", "src/data/news_pipeline.db")
+    curr_path = storage.get("db_path")
+    has_existing = bool(curr_path)
     
+    curr_folder = str(Path(curr_path).parent) if has_existing else "미설정"
+    display_path = curr_path if has_existing else "미설정"
+
+    # [Req 1 & 4] 현재 DB 설정 현황 (입력된 폴더명 vs 실제 DB 경로 명시)
     ui.draw_line("─")
     print(f"{ui.HL}  [ 현재 DB 저장 경로 설정 내용 ]{ui.FG}")
-    print(f"  • 현재 DB 경로 : {curr_path}")
-    print(f"  • 안내 : DB 파일명(news_pipeline.db)은 고정되며 폴더 위치만 설정합니다.")
+    print(f"  • 입력된 폴더명 : {ui.HL}{curr_folder}{ui.FG}")
+    print(f"  • 실제 DB 경로   : {display_path}")
     ui.draw_line("─")
-    print("\n  예시) 'data' 또는 'src/data' 입력 시 -> src/data/news_pipeline.db 로 지정됩니다.")
     
-    new_dir = _prompt("새로운 DB 저장 폴더 입력", str(Path(curr_path).parent))
-    if new_dir is None: return
+    # [Req 2] 안내 및 입력 예시 통합 영역
+    print(f"\n{ui.HL}  [ 안내 및 입력 예시 ]{ui.FG}")
+    print("  • DB 파일명(news_pipeline.db)은 고정되며, 저장할 폴더 위치만 입력합니다.")
+    print("  • 'data' 입력 시 ➔ 'src/data/news_pipeline.db' 로 자동 정규화되어 저장됩니다.\n")
     
-    p = Path(new_dir.strip())
+    # [Req 3] 신규 입력 vs 수정에 따른 프롬프트 분기 (현재설정유지는 수정 시에만 노출)
+    if has_existing:
+        print(f"{ui.FG}▶ 변경할 DB 저장 폴더명을 입력하세요.")
+        ui.draw_line("─")
+        prompt_str = f"{ui.rl_color(ui.HL)}[C: 취소 | Enter: 현재 설정 유지 ({curr_folder})] > {ui.rl_color(ui.FG)}"
+    else:
+        print(f"{ui.FG}▶ DB 저장 폴더명을 입력하세요 (추천: data).")
+        ui.draw_line("─")
+        prompt_str = f"{ui.rl_color(ui.HL)}[C: 취소 | Enter: 기본값 (data) 적용] > {ui.rl_color(ui.FG)}"
+
+    input_dir = input(prompt_str).strip()
+    
+    if input_dir.lower() == 'c':
+        print(f"\n{ui.HL}>> 작업을 취소했습니다.{ui.FG}")
+        ui.pause("[Enter]를 누르세요...")
+        return
+        
+    if not input_dir:
+        if has_existing:
+            final_folder = curr_folder
+        else:
+            final_folder = "src/data"
+    else:
+        final_folder = input_dir
+
+    # 경로 자동 정규화 (src/ 미포함 시 자동 추가)
+    p = Path(final_folder)
     if not str(p).startswith("src"):
         p = Path("src") / p
         
@@ -633,8 +653,11 @@ def _set_db_path(cfg):
     storage["db_path"] = final_db_path
     config_mgr.save_config(cfg)
     
-    print(f"\n{ui.HL}>> DB 저장 경로가 [{final_db_path}]로 설정되었습니다!{ui.FG}")
-    ui.pause("[Enter]를 누르세요...")
+    # [Req 4] 저장 결과 확정 표시
+    print(f"\n{ui.HL}>> DB 저장 경로 설정이 완료되었습니다!{ui.FG}")
+    print(f"  • 입력된 폴더명 : {p}")
+    print(f"  • 실제 DB 경로   : {final_db_path}")
+    ui.pause("\n[Enter]를 누르면 DB 설정 현황으로 돌아갑니다...")
 
 
 # ----------------------------------------------------
