@@ -114,6 +114,91 @@ def update_ai_summary(news_id, ai_summary):
         print(f"[DB Update 에러] {e}")
         return False
 
+# ==========================================
+# 3. 품질 지표 및 TOP N 집계 SQL (report.py 작업자용)
+# ==========================================
+
+def get_clean_news_count(date_from=None, date_to=None):
+    """
+    [ report.py 작업자용 ]
+    clean_news 테이블의 전체(또는 기간 내) 건수를 셉니다.
+    """
+    sql = "SELECT COUNT(*) AS cnt FROM clean_news"
+    params = []
+    if date_from and date_to:
+        sql += " WHERE pub_date BETWEEN ? AND ?"
+        params = [date_from, date_to]
+    try:
+        with get_db_connection() as conn:
+            row = conn.execute(sql, params).fetchone()
+            return row["cnt"] if row else 0
+    except Exception as e:
+        print(f"[DB Select 에러] {e}")
+        return 0
+
+def get_summarize_success_rate():
+    """
+    [ report.py 작업자용 ]
+    ② AI 요약 성공률 = (요약 성공 건수 / 요약 시도 대상 전체 건수) * 100
+    is_summarized=1 인 건수를 성공 건수로, clean_news 전체 건수를 시도 대상으로 집계합니다.
+    """
+    sql = "SELECT COUNT(*) AS total, SUM(is_summarized) AS success FROM clean_news"
+    try:
+        with get_db_connection() as conn:
+            row = conn.execute(sql).fetchone()
+        total = row["total"] or 0
+        success = row["success"] or 0
+        rate = round((success / total) * 100, 2) if total else 0.0
+        return {"total_target": total, "success_count": success, "rate": rate}
+    except Exception as e:
+        print(f"[DB Select 에러] {e}")
+        return {"total_target": 0, "success_count": 0, "rate": 0.0}
+
+def get_category_top_n(n=3, date_from=None, date_to=None):
+    """
+    [ report.py 작업자용 ]
+    ② 카테고리별 뉴스 수집량 TOP N (기본 3) 을 GROUP BY + LIMIT 으로 집계합니다.
+    """
+    sql = "SELECT category, COUNT(*) AS cnt FROM clean_news"
+    params = []
+    if date_from and date_to:
+        sql += " WHERE pub_date BETWEEN ? AND ?"
+        params = [date_from, date_to]
+    sql += " GROUP BY category ORDER BY cnt DESC LIMIT ?"
+    params.append(n)
+    try:
+        with get_db_connection() as conn:
+            rows = conn.execute(sql, params).fetchall()
+            return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[DB Select 에러] {e}")
+        return []
+
+def get_keyword_top_n(n=5):
+    """
+    [ report.py 작업자용 ]
+    ① 최다 출현 핵심 키워드 TOP N (기본 5).
+    ai_insight.core_keywords (콤마 구분 문자열)를 모두 모아 collections.Counter로 집계합니다.
+    """
+    from collections import Counter
+
+    sql = "SELECT core_keywords FROM ai_insight"
+    try:
+        with get_db_connection() as conn:
+            rows = conn.execute(sql).fetchall()
+    except Exception as e:
+        print(f"[DB Select 에러] {e}")
+        return []
+
+    counter = Counter()
+    for row in rows:
+        keywords = row["core_keywords"] or ""
+        for keyword in keywords.split(","):
+            keyword = keyword.strip()
+            if keyword:
+                counter[keyword] += 1
+    return counter.most_common(n)
+
 def upsert_ai_insight(insight_data):
     """
     [ analyze.py 작업자용 ]

@@ -77,6 +77,76 @@ def chart_daily_trend():
     return path
 
 
+def _raw_news_count():
+    """
+    raw 저장소(JSONL, data/raw/*.jsonl)에 적재된 전체 원본 뉴스 건수를 셉니다.
+    정제 통과율(clean/raw) 계산의 분모로 사용됩니다.
+    """
+    cfg = config_mgr.load_config()
+    raw_dir = os.path.join(cfg.get("db_path", "./data"), "raw")
+    if not os.path.isdir(raw_dir):
+        return 0
+
+    count = 0
+    for name in os.listdir(raw_dir):
+        if not name.endswith(".jsonl"):
+            continue
+        with open(os.path.join(raw_dir, name), "r", encoding="utf-8") as f:
+            count += sum(1 for line in f if line.strip())
+    return count
+
+
+def get_cleanliness_rate():
+    """① 데이터 정제 통과율 = (clean 건수 / raw 건수) * 100"""
+    raw_count = _raw_news_count()
+    clean_count = sqlite_mgr.get_clean_news_count()
+    rate = round((clean_count / raw_count) * 100, 2) if raw_count else None
+    return {"raw_count": raw_count, "clean_count": clean_count, "rate": rate}
+
+
+def show_quality_metrics():
+    """품질 지표(정제 통과율, AI 요약 성공률)를 조회하여 출력합니다."""
+    cleanliness = get_cleanliness_rate()
+    summarize = sqlite_mgr.get_summarize_success_rate()
+
+    print(f"\n{ui.HL}[ 품질 지표 ]{ui.FG}")
+    print(f"  ① 데이터 정제 통과율 (Cleanliness Rate)")
+    if cleanliness["rate"] is None:
+        print(f"     raw 데이터가 없어 계산할 수 없습니다. (clean: {cleanliness['clean_count']}건)")
+    else:
+        print(f"     raw {cleanliness['raw_count']}건 → clean {cleanliness['clean_count']}건 "
+              f"= {cleanliness['rate']}%")
+
+    print(f"\n  ② AI 요약 성공률 (Summarize Success Rate)")
+    print(f"     시도 대상 {summarize['total_target']}건 중 성공 {summarize['success_count']}건 "
+          f"= {summarize['rate']}%")
+
+    input("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
+
+
+def show_top_n():
+    """TOP N 집계(핵심 키워드 TOP5, 카테고리별 수집량 TOP3)를 조회하여 출력합니다."""
+    keyword_top5 = sqlite_mgr.get_keyword_top_n(5)
+    category_top3 = sqlite_mgr.get_category_top_n(3)
+
+    print(f"\n{ui.HL}[ TOP N 집계 ]{ui.FG}")
+    print("  ① 최다 출현 핵심 키워드 TOP 5")
+    if keyword_top5:
+        for rank, (keyword, cnt) in enumerate(keyword_top5, start=1):
+            print(f"     {rank}. {keyword} ({cnt}회)")
+    else:
+        print("     집계할 ai_insight 데이터가 없습니다.")
+
+    print("\n  ② 카테고리별 뉴스 수집량 TOP 3")
+    if category_top3:
+        for rank, row in enumerate(category_top3, start=1):
+            print(f"     {rank}. {row['category']} ({row['cnt']}건)")
+    else:
+        print("     집계할 clean_news 데이터가 없습니다.")
+
+    input("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
+
+
 def _generate_and_report(chart_func, label):
     try:
         path = chart_func()
@@ -99,6 +169,8 @@ def run_menu_show():
         print("  1. 카테고리별 뉴스 건수 차트 생성")
         print("  2. 일자별 뉴스 수집 추이 차트 생성")
         print("  3. 전체 차트 일괄 생성")
+        print("  4. 품질 지표 조회 (정제 통과율, AI 요약 성공률)")
+        print("  5. TOP N 집계 조회 (핵심 키워드 TOP5, 카테고리 TOP3)")
         print("  p. 이전 메뉴로 돌아가기 (상위 메뉴)\n")
 
         print("-" * w)
@@ -119,6 +191,10 @@ def run_menu_show():
             except Exception as e:
                 print(f"\n{ui.ERR}[오류] 차트 생성 중 문제가 발생했습니다: {e}{ui.FG}")
             input("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
+        elif choice == '4':
+            show_quality_metrics()
+        elif choice == '5':
+            show_top_n()
         else:
             print("\n올바르지 않은 명령어나 번호입니다.")
             input("다시 시도하려면 [Enter]를 누르세요...")
