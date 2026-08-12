@@ -26,4 +26,5 @@ config.json
 *.sqlite3
 data/
 logs/
+reports/
 *.jsonl
