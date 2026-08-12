@@ -18,7 +18,7 @@ METHOD_LABELS = {"rss": "RSS", "api": "API", "crawl": "크롤링"}
 
 
 def _prompt(msg, current_val=None, allow_enter_keep=True):
-    """공통 프롬프트 입력 함수"""
+    """공통 프롬프트 (readline 겹침 방지 ui.rl_color 적용)"""
     hints = ["C: 취소"]
     if allow_enter_keep and current_val is not None and current_val != "":
         hints.append("Enter: 현재 설정 유지")
@@ -28,7 +28,9 @@ def _prompt(msg, current_val=None, allow_enter_keep=True):
     hint_str = f" [{ ' | '.join(hints) }]"
     
     ui.draw_line("─")
-    val = input(f"{ui.FG}{msg}{ui.HL}{hint_str} > {ui.FG}").strip()
+    # ui.rl_color를 적용하여 입력 중 글자 겹침 버그 방지
+    prompt_str = f"{ui.rl_color(ui.FG)}{msg}{ui.rl_color(ui.HL)}{hint_str} > {ui.rl_color(ui.FG)}"
+    val = input(prompt_str).strip()
     
     if val.lower() == 'c':
         print(f"\n{ui.HL}>> 작업을 취소했습니다.{ui.FG}")
@@ -39,16 +41,20 @@ def _prompt(msg, current_val=None, allow_enter_keep=True):
 
 
 def run_menu_show():
-    """TUI 환경 설정 메인 메뉴 루프"""
+    """TUI 환경 설정 메인 메뉴 루프 (실제 데이터 기반 상태 체크)"""
     while True:
         ui.clear_screen()
         cfg = config_mgr.load_config()
+        
+        # [수정] 플래그가 아닌 실제 데이터 검증 결과 사용
+        status_map = config_mgr.get_setup_status()
+        
         ui.draw_header("시스템 환경 설정 메뉴")
         
-        ai_st = "완료" if cfg.get("setup_ai") else "미완료"
+        ai_st = "완료" if status_map["setup_ai"] else "미완료"
         news_cnt = len(cfg.get("news_sources", []))
-        news_st = f"완료 ({news_cnt}개)" if news_cnt > 0 else "미완료"
-        log_st = "완료" if cfg.get("setup_log") else "미완료"
+        news_st = f"완료 ({news_cnt}개)" if status_map["setup_news"] else "미완료"
+        log_st = "완료" if status_map["setup_log"] else "미완료"
 
         print(f"  1. AI 환경 설정 (플랫폼/모델/Key) [{ai_st}]")
         print(f"  2. 뉴스 소스 관리 (목록/추가/수정/삭제) [{news_st}]")
@@ -70,11 +76,8 @@ def run_menu_show():
             _set_log_config(cfg)
 
 
-# ----------------------------------------------------
-# 1. AI 환경 설정 (현황 조회 & 변경 마법사 분리)
-# ----------------------------------------------------
 def _set_api_key(cfg):
-    """AI 환경 설정 메인 (현황 조회 영역 - C: 취소 미노출)"""
+    """AI 환경 설정 메인 현황 조회"""
     while True:
         ui.clear_screen()
         ui.draw_header(" AI 환경 설정 ")
@@ -83,7 +86,8 @@ def _set_api_key(cfg):
         curr_model = config_mgr.get_env("LLM_MODEL") or ""
         curr_key = config_mgr.get_env("LLM_API_KEY") or ""
         
-        has_existing = bool(curr_prov and curr_model and curr_key)
+        # 실제 데이터 유효성 판단
+        has_existing = config_mgr.is_ai_setup_complete()
         
         ui.draw_line("─")
         print(f"{ui.HL}  [ 현재 AI 환경 설정 내용 ]{ui.FG}")
@@ -95,13 +99,12 @@ def _set_api_key(cfg):
         ui.draw_line("─")
         print()
         
-        # [수정사항 1, 2 반영] 
-        # 설정 진입 전 현황 화면에서는 C: 취소를 노출하지 않고, 변경 진행 키(1번) 안내
         if has_existing:
             print("  1. AI 환경 설정 변경")
             print("  p. 상위 메뉴로 이동\n")
             ui.draw_line("─")
-            cmd = input(f"\n{ui.HL}입력 (1: 설정 변경 / p: 상위 메뉴로) > {ui.FG}").strip().lower()
+            prompt_str = f"{ui.rl_color(ui.HL)}입력 (1: 설정 변경 / p: 상위 메뉴로) > {ui.rl_color(ui.FG)}"
+            cmd = input(prompt_str).strip().lower()
             
             if cmd == 'p':
                 break
@@ -114,7 +117,8 @@ def _set_api_key(cfg):
             print("  1. AI 환경 신규 설정")
             print("  p. 상위 메뉴로 이동\n")
             ui.draw_line("─")
-            cmd = input(f"\n{ui.HL}입력 (1: 신규 설정 진행 / p: 상위 메뉴로) > {ui.FG}").strip().lower()
+            prompt_str = f"{ui.rl_color(ui.HL)}입력 (1: 신규 설정 진행 / p: 상위 메뉴로) > {ui.rl_color(ui.FG)}"
+            cmd = input(prompt_str).strip().lower()
             
             if cmd == 'p':
                 break
@@ -126,11 +130,10 @@ def _set_api_key(cfg):
 
 
 def _edit_api_key_wizard(cfg, curr_prov, curr_model, curr_key):
-    """실제 설정 변경 절차 (이 과정에서만 C: 취소 활성화)"""
+    """AI 설정 변경 절차"""
     ui.clear_screen()
     ui.draw_header(" AI 환경 설정 변경 ")
     
-    # [1] 플랫폼 선택
     prov_label = PROVIDER_LABELS.get(curr_prov, "")
     print(f"{ui.HL}  [ AI 플랫폼 선택 ]{ui.FG}")
     print("  1) Gemini (Google)")
@@ -140,15 +143,15 @@ def _edit_api_key_wizard(cfg, curr_prov, curr_model, curr_key):
     print(f"{ui.FG}▶ 사용할 AI 플랫폼 번호를 선택하세요.")
     ui.draw_line("─")
     
-    # 변경 진행 중이므로 C: 취소 안내 노출
     if curr_prov:
-        hint_str = f"[C: 취소 | Enter: 현재 설정 유지 ({prov_label})]"
+        hint_str = f"[p: 상위 메뉴로 | C: 취소 | Enter: 현재 설정 유지 ({prov_label})]"
     else:
-        hint_str = "[C: 취소]"
+        hint_str = "[p: 상위 메뉴로 | C: 취소]"
         
-    prov_choice = input(f"{ui.HL}{hint_str} > {ui.FG}").strip()
+    prompt_str = f"{ui.rl_color(ui.HL)}{hint_str} > {ui.rl_color(ui.FG)}"
+    prov_choice = input(prompt_str).strip()
     
-    if prov_choice.lower() in ['c']:
+    if prov_choice.lower() in ['p', 'c']:
         print(f"\n{ui.HL}>> 변경 작업을 취소했습니다.{ui.FG}")
         ui.pause("[Enter]를 누르세요...")
         return
@@ -168,53 +171,48 @@ def _edit_api_key_wizard(cfg, curr_prov, curr_model, curr_key):
             return
         provider = provider_map[prov_choice]
 
-    # [2] 모델명 선택
+    # 모델명 입력
     print()
     if curr_model and provider == curr_prov:
         print(f"{ui.FG}▶ 사용할 모델명을 입력하세요.")
         ui.draw_line("─")
-        model_input = input(f"{ui.HL}[C: 취소 | Enter: 현재 설정 유지 ({curr_model})] > {ui.FG}").strip()
+        prompt_str = f"{ui.rl_color(ui.HL)}[p: 상위 메뉴로 | C: 취소 | Enter: 현재 설정 유지 ({curr_model})] > {ui.rl_color(ui.FG)}"
+        model_input = input(prompt_str).strip()
         
-        if model_input.lower() in ['c']:
+        if model_input.lower() in ['p', 'c']:
             print(f"\n{ui.HL}>> 변경 작업을 취소했습니다.{ui.FG}")
             ui.pause("[Enter]를 누르세요...")
             return
-        if not model_input:
-            model = curr_model
-        else:
-            model = model_input
+        model = curr_model if not model_input else model_input
     else:
         default_m = DEFAULT_MODELS.get(provider, "gemini-1.5-flash")
         print(f"{ui.FG}▶ 사용할 모델명을 입력하세요 (추천: {default_m}).")
         ui.draw_line("─")
-        model_input = input(f"{ui.HL}[C: 취소 | Enter: 추천 모델 ({default_m}) 적용] > {ui.FG}").strip()
+        prompt_str = f"{ui.rl_color(ui.HL)}[p: 상위 메뉴로 | C: 취소 | Enter: 추천 모델 ({default_m}) 적용] > {ui.rl_color(ui.FG)}"
+        model_input = input(prompt_str).strip()
         
-        if model_input.lower() in ['c']:
+        if model_input.lower() in ['p', 'c']:
             print(f"\n{ui.HL}>> 변경 작업을 취소했습니다.{ui.FG}")
             ui.pause("[Enter]를 누르세요...")
             return
-        if not model_input:
-            model = default_m
-        else:
-            model = model_input
+        model = default_m if not model_input else model_input
 
-    # [3] API Key 입력
+    # API Key 입력
     print()
     print(f"{ui.FG}▶ API Key를 입력하세요 (마스킹되어 저장됩니다).")
     ui.draw_line("─")
     if curr_key:
-        key_input = input(f"{ui.HL}[C: 취소 | Enter: 현재 설정 유지] > {ui.FG}").strip()
-        if key_input.lower() in ['c']:
+        prompt_str = f"{ui.rl_color(ui.HL)}[p: 상위 메뉴로 | C: 취소 | Enter: 현재 설정 유지] > {ui.rl_color(ui.FG)}"
+        key_input = input(prompt_str).strip()
+        if key_input.lower() in ['p', 'c']:
             print(f"\n{ui.HL}>> 변경 작업을 취소했습니다.{ui.FG}")
             ui.pause("[Enter]를 누르세요...")
             return
-        if not key_input:
-            key = curr_key
-        else:
-            key = key_input
+        key = curr_key if not key_input else key_input
     else:
-        key_input = input(f"{ui.HL}[C: 취소] > {ui.FG}").strip()
-        if key_input.lower() in ['c']:
+        prompt_str = f"{ui.rl_color(ui.HL)}[p: 상위 메뉴로 | C: 취소] > {ui.rl_color(ui.FG)}"
+        key_input = input(prompt_str).strip()
+        if key_input.lower() in ['p', 'c']:
             print(f"\n{ui.HL}>> 변경 작업을 취소했습니다.{ui.FG}")
             ui.pause("[Enter]를 누르세요...")
             return
@@ -222,14 +220,14 @@ def _edit_api_key_wizard(cfg, curr_prov, curr_model, curr_key):
             print(f"\n{ui.ERR}[오류] API Key는 필수 입력 항목입니다. 비워둘 수 없습니다.{ui.FG}")
             ui.pause("다시 시도하려면 [Enter]를 누르세요...")
             return
-        else:
-            key = key_input
+        key = key_input
 
     # 변경사항 저장
     config_mgr.set_env("LLM_PROVIDER", provider)
     config_mgr.set_env("LLM_MODEL", model)
     config_mgr.set_env("LLM_API_KEY", key)
     
+    # 동적 검증으로 대체되었으므로 보조 플래그만 기록
     cfg["setup_ai"] = True
     config_mgr.save_config(cfg)
     
@@ -237,9 +235,6 @@ def _edit_api_key_wizard(cfg, curr_prov, curr_model, curr_key):
     ui.pause("[Enter]를 누르면 AI 환경 설정 현황으로 돌아갑니다...")
 
 
-# ----------------------------------------------------
-# 2. 뉴스 소스 관리
-# ----------------------------------------------------
 def _manage_news_sources(cfg):
     while True:
         ui.clear_screen()
@@ -399,9 +394,6 @@ def _delete_source_action(cfg):
     ui.pause("[Enter]를 누르세요...")
 
 
-# ----------------------------------------------------
-# 3. DB 저장 폴더 경로 설정
-# ----------------------------------------------------
 def _set_db_path(cfg):
     ui.clear_screen()
     ui.draw_header("DB 저장 폴더 경로 설정")
@@ -431,9 +423,6 @@ def _set_db_path(cfg):
     ui.pause("[Enter]를 누르세요...")
 
 
-# ----------------------------------------------------
-# 4. 로그 폴더 경로 및 수준 설정
-# ----------------------------------------------------
 def _set_log_config(cfg):
     ui.clear_screen()
     ui.draw_header("로그 폴더 경로 및 수준 설정")

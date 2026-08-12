@@ -20,6 +20,13 @@ FG = BOLD + "\033[97m"       # 굵고 밝은 흰색
 HL = BOLD + "\033[93m"       # 굵은 강조 노란색
 ERR = BOLD + "\033[91m"      # 굵은 에러 빨간색
 
+def rl_color(code):
+    """
+    readline 모듈이 터미널 너비를 계산할 때 
+    ANSI 제어 문자를 무시하도록 \001과 \002로 감싸주는 헬퍼 함수
+    """
+    return f"\001{code}\002"
+
 def reset_terminal():
     """프로그램 종료 시 터미널 배경색, 글꼴, 색상을 완전히 원래대로 초기화합니다."""
     print(f"{RESET}\033[2J\033[H", end="", flush=True)
