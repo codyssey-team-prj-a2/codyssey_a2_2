@@ -72,6 +72,19 @@ def draw_header(title):
     print(f"{HL}┃{FG}" + pad_text(title, width-2, "center") + f"{HL}┃{FG}")
     print(f"{HL}┗{border_line}┛{FG}")
 
+def pause(msg="\n[Enter]를 눌러 계속합니다..."):
+    """'Enter를 눌러 계속' 같은 단순 대기용 입력.
+
+    cron/작업 스케줄러처럼 표준입력이 없는 비대화형 환경에서 호출되면
+    input()이 EOFError를 던지는데, 그 경우엔 조용히 넘어간다(대화형
+    사용자에게는 기존과 동일하게 Enter를 기다리는 동작 그대로 유지).
+    """
+    try:
+        input(msg)
+    except EOFError:
+        pass
+
+
 def safe_input(prompt_text):
     """
     안전한 입력 함수 (입력 라인 바로 위에 실선 구분선 자동 생성)
