@@ -238,6 +238,67 @@ def get_news_for_export(status="all", date_from=None, date_to=None):
         print(f"[DB Select 에러] {e}")
         return []
 
+# ==========================================
+# 5. CLI 데이터 탐색용 조회 SQL (list.py / show.py 작업자용)
+# ==========================================
+
+def get_news_list(page=1, size=10, category=None):
+    """
+    [ list.py 작업자용 ]
+    clean_news 목록을 페이징(LIMIT/OFFSET)하여 조회합니다.
+
+    :return: {"items": [...], "page": 페이지 번호, "size": 페이지당 건수,
+              "total": 조건에 맞는 전체 건수, "total_pages": 전체 페이지 수}
+    """
+    page = max(page, 1)
+    size = max(size, 1)
+    offset = (page - 1) * size
+
+    where_clause = " WHERE category = ?" if category else ""
+    params = [category] if category else []
+
+    try:
+        with get_db_connection() as conn:
+            total = conn.execute(
+                f"SELECT COUNT(*) AS cnt FROM clean_news{where_clause}", params
+            ).fetchone()["cnt"]
+
+            rows = conn.execute(
+                f"""
+                SELECT news_id, source, category, title, pub_date, is_summarized
+                FROM clean_news{where_clause}
+                ORDER BY pub_date DESC, news_id
+                LIMIT ? OFFSET ?
+                """,
+                params + [size, offset],
+            ).fetchall()
+
+        total_pages = (total + size - 1) // size if total else 0
+        return {
+            "items": [dict(row) for row in rows],
+            "page": page,
+            "size": size,
+            "total": total,
+            "total_pages": total_pages,
+        }
+    except Exception as e:
+        print(f"[DB Select 에러] {e}")
+        return {"items": [], "page": page, "size": size, "total": 0, "total_pages": 0}
+
+def get_news_by_id(news_id):
+    """
+    [ show.py 작업자용 ]
+    특정 뉴스 1건의 상세 정보(본문, 요약 포함)를 조회합니다.
+    """
+    sql = "SELECT * FROM clean_news WHERE news_id = ?"
+    try:
+        with get_db_connection() as conn:
+            row = conn.execute(sql, (news_id,)).fetchone()
+            return dict(row) if row else None
+    except Exception as e:
+        print(f"[DB Select 에러] {e}")
+        return None
+
 def upsert_ai_insight(insight_data):
     """
     [ analyze.py 작업자용 ]
