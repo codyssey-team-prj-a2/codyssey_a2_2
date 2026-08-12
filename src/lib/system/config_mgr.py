@@ -1,8 +1,11 @@
 import json
 import os
+from pathlib import Path
 
-CONFIG_FILE = "config.json"
-ENV_FILE = ".env"
+SRC_DIR = Path(__file__).resolve().parents[2]
+
+CONFIG_FILE = SRC_DIR / "config.json"
+ENV_FILE = SRC_DIR / ".env"
 
 
 def load_config():
