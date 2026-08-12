@@ -1,5 +1,8 @@
 # src/lib/dev/report.py
+import argparse
 import os
+import shlex
+from datetime import datetime
 
 import matplotlib
 matplotlib.use("Agg")
@@ -11,6 +14,13 @@ from lib.common import helpers
 from lib.db import sqlite_mgr
 
 _KOREAN_FONT_CANDIDATES = ["Malgun Gothic", "NanumGothic", "AppleGothic"]
+
+# CLI 명령어를 코드 내부에서 파싱하기 위한 전용 파서 설정
+report_parser = argparse.ArgumentParser(prog="report", add_help=False)
+report_parser.add_argument("--date-from", type=str, default=None)
+report_parser.add_argument("--date-to", type=str, default=None)
+report_parser.add_argument("--format", "-f", type=str, default="console",
+                            choices=["console", "txt", "md"])
 
 
 def _setup_korean_font():
@@ -147,6 +157,149 @@ def show_top_n():
     input("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
 
 
+def _reports_dir():
+    cfg = config_mgr.load_config()
+    reports_dir = cfg.get("report_path", "./reports")
+    os.makedirs(reports_dir, exist_ok=True)
+    return reports_dir
+
+
+def build_report_content(date_from=None, date_to=None, fmt="console"):
+    """
+    품질 지표 + TOP N 집계를 하나의 종합 리포트 텍스트로 구성합니다.
+    fmt="md" 인 경우 마크다운 헤더/목록 문법으로, 그 외에는 콘솔/txt 겸용 평문으로 구성합니다.
+    """
+    cleanliness = get_cleanliness_rate()
+    summarize = sqlite_mgr.get_summarize_success_rate()
+    category_top3 = sqlite_mgr.get_category_top_n(3, date_from, date_to)
+    keyword_top5 = sqlite_mgr.get_keyword_top_n(5)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    period = f"{date_from} ~ {date_to}" if date_from and date_to else "전체 기간"
+
+    cleanliness_line = (
+        "raw 데이터가 없어 계산할 수 없습니다."
+        if cleanliness["rate"] is None
+        else f"raw {cleanliness['raw_count']}건 → clean {cleanliness['clean_count']}건 = {cleanliness['rate']}%"
+    )
+    summarize_line = (
+        f"시도 대상 {summarize['total_target']}건 중 성공 {summarize['success_count']}건 "
+        f"= {summarize['rate']}%"
+    )
+    keyword_lines = (
+        [f"{i}. {kw} ({cnt}회)" for i, (kw, cnt) in enumerate(keyword_top5, start=1)]
+        or ["집계할 ai_insight 데이터가 없습니다."]
+    )
+    category_lines = (
+        [f"{i}. {row['category']} ({row['cnt']}건)" for i, row in enumerate(category_top3, start=1)]
+        or ["집계할 clean_news 데이터가 없습니다."]
+    )
+
+    lines = []
+    if fmt == "md":
+        lines.append("# 코디세이 뉴스 데이터 분석 리포트")
+        lines.append(f"- 생성 시각: {now}")
+        lines.append(f"- 집계 기간: {period}")
+        lines.append("")
+        lines.append("## 1. 품질 지표")
+        lines.append(f"- ① 데이터 정제 통과율: {cleanliness_line}")
+        lines.append(f"- ② AI 요약 성공률: {summarize_line}")
+        lines.append("")
+        lines.append("## 2. TOP N 집계")
+        lines.append("### 최다 출현 핵심 키워드 TOP 5")
+        lines += [f"- {line}" for line in keyword_lines]
+        lines.append("")
+        lines.append("### 카테고리별 뉴스 수집량 TOP 3")
+        lines += [f"- {line}" for line in category_lines]
+    else:
+        lines.append("=" * 60)
+        lines.append("코디세이 뉴스 데이터 분석 리포트".center(52))
+        lines.append("=" * 60)
+        lines.append(f"생성 시각: {now}")
+        lines.append(f"집계 기간: {period}")
+        lines.append("-" * 60)
+        lines.append("[ 품질 지표 ]")
+        lines.append(f"  ① 데이터 정제 통과율: {cleanliness_line}")
+        lines.append(f"  ② AI 요약 성공률   : {summarize_line}")
+        lines.append("-" * 60)
+        lines.append("[ TOP N 집계 ]")
+        lines.append("  최다 출현 핵심 키워드 TOP 5")
+        lines += [f"    {line}" for line in keyword_lines]
+        lines.append("  카테고리별 뉴스 수집량 TOP 3")
+        lines += [f"    {line}" for line in category_lines]
+        lines.append("=" * 60)
+
+    return "\n".join(lines)
+
+
+def save_report_file(content, fmt):
+    ext = "md" if fmt == "md" else "txt"
+    filename = f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
+    path = os.path.join(_reports_dir(), filename)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+    return path
+
+
+def run_report(date_from=None, date_to=None, fmt="console"):
+    """종합 리포트를 생성합니다. console 형식은 화면에 출력만, txt/md 형식은 파일로 저장합니다."""
+    content = build_report_content(date_from, date_to, fmt)
+
+    if fmt == "console":
+        print(f"\n{ui.HL}{content}{ui.FG}")
+    else:
+        path = save_report_file(content, fmt)
+        print(f"\n{ui.HL}>> {fmt.upper()} 리포트 파일이 저장되었습니다.{ui.FG}")
+        print(f"   저장 경로: {path}")
+
+    input("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
+
+
+def run_report_cli(command_str):
+    """'report --format md --date-from 2026-08-01 --date-to 2026-08-07' 형태의 입력을 파싱해 실행합니다."""
+    try:
+        args_list = shlex.split(command_str)
+        args, unknown = report_parser.parse_known_args(args_list[1:])
+
+        if unknown:
+            print(f"\n알 수 없는 옵션이 포함되어 있습니다: {unknown}")
+            input("[Enter]를 눌러 돌아갑니다...")
+            return
+
+        run_report(args.date_from, args.date_to, args.format)
+
+    except SystemExit:
+        print("\n[오류] '--format' 옵션은 console, txt, md 중 하나여야 합니다.")
+        input("[Enter]를 눌러 돌아갑니다...")
+    except Exception as e:
+        print(f"\n[오류] 명령어 파싱 중 에러 발생: {e}")
+        input("[Enter]를 눌러 돌아갑니다...")
+
+
+def run_report_interactive():
+    print(f"\n{ui.HL}[ 대화형 리포트 생성 설정 ]{ui.FG}")
+    print("안내: 입력을 취소하고 메뉴로 돌아가려면 언제든 'q'를 입력하세요.\n")
+
+    fmt = ui.safe_input("▶ 출력 형식 입력 (console/txt/md, 기본 console) [q:취소]: ")
+    if fmt and fmt.lower() == 'q':
+        return
+    fmt = fmt.strip().lower() if fmt and fmt.strip() else "console"
+    if fmt not in ("console", "txt", "md"):
+        print(f"\n{ui.ERR}[오류] 지원하지 않는 형식입니다: {fmt}{ui.FG}")
+        input("[Enter]를 눌러 돌아갑니다...")
+        return
+
+    date_from = ui.safe_input("▶ 집계 시작일 입력 (예: 2026-08-01, 건너뛰려면 Enter) [q:취소]: ")
+    if date_from and date_from.lower() == 'q':
+        return
+    date_to = ui.safe_input("▶ 집계 종료일 입력 (예: 2026-08-07, 건너뛰려면 Enter) [q:취소]: ")
+    if date_to and date_to.lower() == 'q':
+        return
+
+    run_report(date_from.strip() or None if date_from else None,
+               date_to.strip() or None if date_to else None,
+               fmt)
+
+
 def _generate_and_report(chart_func, label):
     try:
         path = chart_func()
@@ -171,7 +324,12 @@ def run_menu_show():
         print("  3. 전체 차트 일괄 생성")
         print("  4. 품질 지표 조회 (정제 통과율, AI 요약 성공률)")
         print("  5. TOP N 집계 조회 (핵심 키워드 TOP5, 카테고리 TOP3)")
+        print("  6. 종합 리포트 생성 (대화형 파라미터 입력)")
         print("  p. 이전 메뉴로 돌아가기 (상위 메뉴)\n")
+
+        print(f"{ui.HL}  [ CLI 직접 입력 예시 ]{ui.FG}")
+        print("  report [--date-from YYYY-MM-DD] [--date-to YYYY-MM-DD] [--format console|txt|md]")
+        print("  (입력 예: report --format md --date-from 2026-08-01 --date-to 2026-08-07)")
 
         print("-" * w)
         choice = input(f"\n{ui.HL}Codyssey/report > {ui.FG}").strip().lower()
@@ -195,6 +353,10 @@ def run_menu_show():
             show_quality_metrics()
         elif choice == '5':
             show_top_n()
+        elif choice == '6':
+            run_report_interactive()
+        elif choice.startswith("report"):
+            run_report_cli(choice)
         else:
             print("\n올바르지 않은 명령어나 번호입니다.")
             input("다시 시도하려면 [Enter]를 누르세요...")
