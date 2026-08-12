@@ -18,16 +18,12 @@ METHOD_LABELS = {"rss": "RSS", "api": "API", "crawl": "크롤링"}
 
 
 def _prompt(msg, current_val=None, allow_enter_keep=True):
-    """
-    공통 프롬프트 입력 함수
-    - 'c' 또는 'C' 입력 시 None (취소) 반환
-    - 엔터 입력 시 current_val 반환 (유지)
-    """
+    """공통 프롬프트 입력 함수"""
     hints = ["C: 취소"]
     if allow_enter_keep and current_val is not None and current_val != "":
-        hints.append("Enter: 기존값 유지")
+        hints.append("Enter: 현재 설정 유지")
     elif allow_enter_keep:
-        hints.append("Enter: 기본값/건너뛰기")
+        hints.append("Enter: 기본값 적용")
         
     hint_str = f" [{ ' | '.join(hints) }]"
     
@@ -43,7 +39,7 @@ def _prompt(msg, current_val=None, allow_enter_keep=True):
 
 
 def run_menu_show():
-    """TUI 환경 설정 메인 메뉴 헤더 및 루프"""
+    """TUI 환경 설정 메인 메뉴 루프"""
     while True:
         ui.clear_screen()
         cfg = config_mgr.load_config()
@@ -75,68 +71,174 @@ def run_menu_show():
 
 
 # ----------------------------------------------------
-# 1. AI 환경 설정
+# 1. AI 환경 설정 (현황 조회 & 변경 마법사 분리)
 # ----------------------------------------------------
 def _set_api_key(cfg):
-    ui.clear_screen()
-    ui.draw_header("AI 환경 설정")
-    
-    curr_prov = config_mgr.get_env("LLM_PROVIDER") or ""
-    curr_model = config_mgr.get_env("LLM_MODEL") or ""
-    curr_key = config_mgr.get_env("LLM_API_KEY") or ""
-    
-    has_existing = bool(curr_prov and curr_model and curr_key)
-    
-    print(f"{ui.HL}┌── [ 현재 설정 내용 ] ──────────────────────────────────────────────┐{ui.FG}")
-    masked_key = (curr_key[:4] + "*" * max(len(curr_key) - 4, 0)) if curr_key else "미설정"
-    prov_label = PROVIDER_LABELS.get(curr_prov, curr_prov if curr_prov else "미설정")
-    print(f"│  * AI 플랫폼 : {prov_label}")
-    print(f"│  * 사용 모델 : {curr_model or '미설정'}")
-    print(f"│  * API Key   : {masked_key}")
-    print(f"{ui.HL}└────────────────────────────────────────────────────────────────────┘{ui.FG}\n")
-    
-    if has_existing:
-        print(f"{ui.HL}>> 이미 설정된 값이 존재합니다. 변경할 내용을 선택/입력해주세요.{ui.FG}\n")
+    """AI 환경 설정 메인 (현황 조회 영역 - C: 취소 미노출)"""
+    while True:
+        ui.clear_screen()
+        ui.draw_header(" AI 환경 설정 ")
         
-    print("  [ AI 플랫폼 선택 ]")
+        curr_prov = config_mgr.get_env("LLM_PROVIDER") or ""
+        curr_model = config_mgr.get_env("LLM_MODEL") or ""
+        curr_key = config_mgr.get_env("LLM_API_KEY") or ""
+        
+        has_existing = bool(curr_prov and curr_model and curr_key)
+        
+        ui.draw_line("─")
+        print(f"{ui.HL}  [ 현재 AI 환경 설정 내용 ]{ui.FG}")
+        masked_key = (curr_key[:4] + "*" * max(len(curr_key) - 4, 0)) if curr_key else "미설정"
+        prov_label = PROVIDER_LABELS.get(curr_prov, curr_prov if curr_prov else "미설정")
+        print(f"  • AI 플랫폼 : {prov_label}")
+        print(f"  • 사용 모델 : {curr_model or '미설정'}")
+        print(f"  • API Key   : {masked_key}")
+        ui.draw_line("─")
+        print()
+        
+        # [수정사항 1, 2 반영] 
+        # 설정 진입 전 현황 화면에서는 C: 취소를 노출하지 않고, 변경 진행 키(1번) 안내
+        if has_existing:
+            print("  1. AI 환경 설정 변경")
+            print("  p. 상위 메뉴로 이동\n")
+            ui.draw_line("─")
+            cmd = input(f"\n{ui.HL}입력 (1: 설정 변경 / p: 상위 메뉴로) > {ui.FG}").strip().lower()
+            
+            if cmd == 'p':
+                break
+            elif cmd == '1':
+                _edit_api_key_wizard(cfg, curr_prov, curr_model, curr_key)
+            else:
+                print(f"\n{ui.ERR}[오류] 올바른 번호(1) 또는 'p'를 입력해 주세요.{ui.FG}")
+                ui.pause("다시 시도하려면 [Enter]를 누르세요...")
+        else:
+            print("  1. AI 환경 신규 설정")
+            print("  p. 상위 메뉴로 이동\n")
+            ui.draw_line("─")
+            cmd = input(f"\n{ui.HL}입력 (1: 신규 설정 진행 / p: 상위 메뉴로) > {ui.FG}").strip().lower()
+            
+            if cmd == 'p':
+                break
+            elif cmd in ['1', '']:
+                _edit_api_key_wizard(cfg, "", "", "")
+            else:
+                print(f"\n{ui.ERR}[오류] 올바른 번호(1) 또는 'p'를 입력해 주세요.{ui.FG}")
+                ui.pause("다시 시도하려면 [Enter]를 누르세요...")
+
+
+def _edit_api_key_wizard(cfg, curr_prov, curr_model, curr_key):
+    """실제 설정 변경 절차 (이 과정에서만 C: 취소 활성화)"""
+    ui.clear_screen()
+    ui.draw_header(" AI 환경 설정 변경 ")
+    
+    # [1] 플랫폼 선택
+    prov_label = PROVIDER_LABELS.get(curr_prov, "")
+    print(f"{ui.HL}  [ AI 플랫폼 선택 ]{ui.FG}")
     print("  1) Gemini (Google)")
     print("  2) GPT (OpenAI)")
-    print("  3) Claude (Anthropic)")
+    print("  3) Claude (Anthropic)\n")
     
-    curr_prov_num = {"gemini": "1", "openai": "2", "anthropic": "3"}.get(curr_prov, "")
-    prov_choice = _prompt("변경할 AI 플랫폼 번호를 선택하세요 (1-3)", curr_prov_num)
-    if prov_choice is None: 
-        return
-        
-    provider_map = {"1": "gemini", "2": "openai", "3": "anthropic"}
-    provider = provider_map.get(prov_choice, curr_prov)
+    print(f"{ui.FG}▶ 사용할 AI 플랫폼 번호를 선택하세요.")
+    ui.draw_line("─")
     
-    if provider not in DEFAULT_MODELS:
-        print(f"\n{ui.ERR}유효하지 않은 플랫폼 선택입니다.{ui.FG}")
-        input("[Enter]를 눌러 다시 시도하세요...")
+    # 변경 진행 중이므로 C: 취소 안내 노출
+    if curr_prov:
+        hint_str = f"[C: 취소 | Enter: 현재 설정 유지 ({prov_label})]"
+    else:
+        hint_str = "[C: 취소]"
+        
+    prov_choice = input(f"{ui.HL}{hint_str} > {ui.FG}").strip()
+    
+    if prov_choice.lower() in ['c']:
+        print(f"\n{ui.HL}>> 변경 작업을 취소했습니다.{ui.FG}")
+        ui.pause("[Enter]를 누르세요...")
         return
         
-    default_m = DEFAULT_MODELS.get(provider, "gemini-1.5-flash")
-    model = _prompt(f"사용할 모델명 입력 [기본값: {default_m}]", curr_model or default_m)
-    if model is None: 
-        return
+    if not prov_choice:
+        if curr_prov:
+            provider = curr_prov
+        else:
+            print(f"\n{ui.ERR}[오류] 설정된 플랫폼이 없으므로 번호를 반드시 선택해야 합니다.{ui.FG}")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")
+            return
+    else:
+        provider_map = {"1": "gemini", "2": "openai", "3": "anthropic"}
+        if prov_choice not in provider_map:
+            print(f"\n{ui.ERR}[오류] 잘못된 선택입니다. 1~3 번호 중에서 선택해 주세요.{ui.FG}")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")
+            return
+        provider = provider_map[prov_choice]
+
+    # [2] 모델명 선택
+    print()
+    if curr_model and provider == curr_prov:
+        print(f"{ui.FG}▶ 사용할 모델명을 입력하세요.")
+        ui.draw_line("─")
+        model_input = input(f"{ui.HL}[C: 취소 | Enter: 현재 설정 유지 ({curr_model})] > {ui.FG}").strip()
         
-    key = _prompt("API Key 입력 (마스킹 저장됨)", curr_key)
-    if key is None: 
-        return
+        if model_input.lower() in ['c']:
+            print(f"\n{ui.HL}>> 변경 작업을 취소했습니다.{ui.FG}")
+            ui.pause("[Enter]를 누르세요...")
+            return
+        if not model_input:
+            model = curr_model
+        else:
+            model = model_input
+    else:
+        default_m = DEFAULT_MODELS.get(provider, "gemini-1.5-flash")
+        print(f"{ui.FG}▶ 사용할 모델명을 입력하세요 (추천: {default_m}).")
+        ui.draw_line("─")
+        model_input = input(f"{ui.HL}[C: 취소 | Enter: 추천 모델 ({default_m}) 적용] > {ui.FG}").strip()
         
+        if model_input.lower() in ['c']:
+            print(f"\n{ui.HL}>> 변경 작업을 취소했습니다.{ui.FG}")
+            ui.pause("[Enter]를 누르세요...")
+            return
+        if not model_input:
+            model = default_m
+        else:
+            model = model_input
+
+    # [3] API Key 입력
+    print()
+    print(f"{ui.FG}▶ API Key를 입력하세요 (마스킹되어 저장됩니다).")
+    ui.draw_line("─")
+    if curr_key:
+        key_input = input(f"{ui.HL}[C: 취소 | Enter: 현재 설정 유지] > {ui.FG}").strip()
+        if key_input.lower() in ['c']:
+            print(f"\n{ui.HL}>> 변경 작업을 취소했습니다.{ui.FG}")
+            ui.pause("[Enter]를 누르세요...")
+            return
+        if not key_input:
+            key = curr_key
+        else:
+            key = key_input
+    else:
+        key_input = input(f"{ui.HL}[C: 취소] > {ui.FG}").strip()
+        if key_input.lower() in ['c']:
+            print(f"\n{ui.HL}>> 변경 작업을 취소했습니다.{ui.FG}")
+            ui.pause("[Enter]를 누르세요...")
+            return
+        if not key_input:
+            print(f"\n{ui.ERR}[오류] API Key는 필수 입력 항목입니다. 비워둘 수 없습니다.{ui.FG}")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")
+            return
+        else:
+            key = key_input
+
+    # 변경사항 저장
     config_mgr.set_env("LLM_PROVIDER", provider)
     config_mgr.set_env("LLM_MODEL", model)
     config_mgr.set_env("LLM_API_KEY", key)
     
     cfg["setup_ai"] = True
     config_mgr.save_config(cfg)
-    print(f"\n{ui.HL}>> AI 설정이 성공적으로 저장되었습니다!{ui.FG}")
-    input("[Enter]를 누르세요...")
+    
+    print(f"\n{ui.HL}>> AI 환경 설정이 성공적으로 저장되었습니다!{ui.FG}")
+    ui.pause("[Enter]를 누르면 AI 환경 설정 현황으로 돌아갑니다...")
 
 
 # ----------------------------------------------------
-# 2. 뉴스 소스 관리 (url / uri 안전 예외 처리 보완)
+# 2. 뉴스 소스 관리
 # ----------------------------------------------------
 def _manage_news_sources(cfg):
     while True:
@@ -144,20 +246,20 @@ def _manage_news_sources(cfg):
         ui.draw_header("뉴스 소스 관리")
         sources = cfg.setdefault("news_sources", [])
         
-        print(f"{ui.HL}┌── [ 현재 등록된 뉴스 소스 목록 ] ────────────────────────────────┐{ui.FG}")
+        ui.draw_line("─")
+        print(f"{ui.HL}  [ 현재 등록된 뉴스 소스 목록 ]{ui.FG}")
         if not sources:
-            print("│  (등록된 뉴스 소스가 없습니다. 신규 추가를 진행해주세요.)         │")
+            print("  (등록된 뉴스 소스가 없습니다. 신규 추가를 진행해주세요.)")
         else:
             for idx, s in enumerate(sources, 1):
                 m_label = METHOD_LABELS.get(s.get("method"), s.get("method", "RSS"))
                 status = "활성" if s.get("enabled", True) else "비활성"
-                # url과 uri 키값 안전 호환
-                url_val = s.get("url") or s.get("uri") or "주소 없음"
-                print(f"│  [{idx}] {s.get('name', '이름없음')} ({m_label}) | 카테고리: {s.get('category', '종합')} | 상태: {status}")
-                print(f"│      URL: {url_val}")
-                if idx < len(sources):
-                    print(f"│  ├" + "─" * 64)
-        print(f"{ui.HL}└────────────────────────────────────────────────────────────────────┘{ui.FG}\n")
+                uri_val = s.get("uri") or s.get("url") or "URI 없음"
+                print(f"  {idx}. {ui.HL}{s.get('name', '이름없음')}{ui.FG}")
+                print(f"     ├─ [방식] {m_label} │ [카테고리] {s.get('category', '종합')} │ [상태] {status}")
+                print(f"     └─ [URI ] {uri_val}")
+        ui.draw_line("─")
+        print()
         
         print("  1. 신규 뉴스 소스 추가")
         print("  2. 기존 뉴스 소스 수정")
@@ -185,7 +287,7 @@ def _add_source_action(cfg):
     
     if any(s.get("name") == name for s in sources):
         print(f"\n{ui.ERR}이미 등록된 소스 이름입니다: {name}{ui.FG}")
-        input("[Enter]를 누르세요...")
+        ui.pause("[Enter]를 누르세요...")
         return
         
     print("\n  [ 수집 방식 선택 ] 1) RSS  2) API  3) 크롤링")
@@ -195,8 +297,8 @@ def _add_source_action(cfg):
     method_map = {"1": "rss", "2": "api", "3": "crawl"}
     method = method_map.get(m_choice, "rss")
     
-    url = _prompt("주소 (URL) 입력")
-    if not url: return
+    uri = _prompt("주소 (URI) 입력")
+    if not uri: return
     
     category = _prompt("카테고리 입력", "종합")
     if category is None: return
@@ -204,22 +306,22 @@ def _add_source_action(cfg):
     sources.append({
         "name": name,
         "method": method,
-        "url": url,
-        "uri": url,  # 구버전/신버전 호환용 쌍둥이 키 저장
+        "uri": uri,
+        "url": uri,
         "category": category,
         "enabled": True
     })
     cfg["setup_news"] = True
     config_mgr.save_config(cfg)
     print(f"\n{ui.HL}>> 뉴스 소스 [{name}]이(가) 추가되었습니다!{ui.FG}")
-    input("[Enter]를 누르세요...")
+    ui.pause("[Enter]를 누르세요...")
 
 
 def _edit_source_action(cfg):
     sources = cfg.get("news_sources", [])
     if not sources:
         print("\n수정할 뉴스 소스가 없습니다.")
-        input("[Enter]를 누르세요...")
+        ui.pause("[Enter]를 누르세요...")
         return
         
     print("\n[ 뉴스 소스 수정 ]")
@@ -230,11 +332,11 @@ def _edit_source_action(cfg):
         idx = int(idx_str) - 1
         if not (0 <= idx < len(sources)):
             print("\n유효하지 않은 번호입니다.")
-            input("[Enter]를 누르세요...")
+            ui.pause("[Enter]를 누르세요...")
             return
     except ValueError:
         print("\n숫자를 입력해 주세요.")
-        input("[Enter]를 누르세요...")
+        ui.pause("[Enter]를 누르세요...")
         return
         
     target = sources[idx]
@@ -250,10 +352,9 @@ def _edit_source_action(cfg):
     
     method = {"1": "rss", "2": "api", "3": "crawl"}.get(m_choice, target.get('method', 'rss'))
     
-    # [핵심] url 및 uri 안전 추출
-    curr_url = target.get('url') or target.get('uri') or ''
-    new_url = _prompt("새 주소 (URL)", curr_url)
-    if new_url is None: return
+    curr_uri = target.get('uri') or target.get('url') or ''
+    new_uri = _prompt("새 주소 (URI)", curr_uri)
+    if new_uri is None: return
     
     new_cat = _prompt("새 카테고리", target.get('category', '종합'))
     if new_cat is None: return
@@ -261,20 +362,20 @@ def _edit_source_action(cfg):
     target.update({
         "name": new_name,
         "method": method,
-        "url": new_url,
-        "uri": new_url,  # 호환성 유지
+        "uri": new_uri,
+        "url": new_uri,
         "category": new_cat
     })
     config_mgr.save_config(cfg)
     print(f"\n{ui.HL}>> 소스 [{new_name}] 수정이 완료되었습니다!{ui.FG}")
-    input("[Enter]를 누르세요...")
+    ui.pause("[Enter]를 누르세요...")
 
 
 def _delete_source_action(cfg):
     sources = cfg.get("news_sources", [])
     if not sources:
         print("\n삭제할 뉴스 소스가 없습니다.")
-        input("[Enter]를 누르세요...")
+        ui.pause("[Enter]를 누르세요...")
         return
         
     print("\n[ 뉴스 소스 삭제 ]")
@@ -295,7 +396,7 @@ def _delete_source_action(cfg):
     except ValueError:
         print("\n숫자를 입력해 주세요.")
         
-    input("[Enter]를 누르세요...")
+    ui.pause("[Enter]를 누르세요...")
 
 
 # ----------------------------------------------------
@@ -308,12 +409,12 @@ def _set_db_path(cfg):
     storage = cfg.setdefault("storage", {})
     curr_path = storage.get("db_path", "src/data/news_pipeline.db")
     
-    print(f"{ui.HL}┌── [ 현재 설정 내용 ] ──────────────────────────────────────────────┐{ui.FG}")
-    print(f"│  * 현재 DB 경로 : {curr_path}")
-    print(f"│  * 안내 : DB 파일명(news_pipeline.db)은 고정되며 폴더 위치만 설정합니다.")
-    print(f"{ui.HL}└────────────────────────────────────────────────────────────────────┘{ui.FG}\n")
-    
-    print("  예시) 'data' 또는 'src/data' 입력 시 -> src/data/news_pipeline.db 로 지정됩니다.")
+    ui.draw_line("─")
+    print(f"{ui.HL}  [ 현재 DB 저장 경로 설정 내용 ]{ui.FG}")
+    print(f"  • 현재 DB 경로 : {curr_path}")
+    print(f"  • 안내 : DB 파일명(news_pipeline.db)은 고정되며 폴더 위치만 설정합니다.")
+    ui.draw_line("─")
+    print("\n  예시) 'data' 또는 'src/data' 입력 시 -> src/data/news_pipeline.db 로 지정됩니다.")
     
     new_dir = _prompt("새로운 DB 저장 폴더 입력", str(Path(curr_path).parent))
     if new_dir is None: return
@@ -327,7 +428,7 @@ def _set_db_path(cfg):
     config_mgr.save_config(cfg)
     
     print(f"\n{ui.HL}>> DB 저장 경로가 [{final_db_path}]로 설정되었습니다!{ui.FG}")
-    input("[Enter]를 누르세요...")
+    ui.pause("[Enter]를 누르세요...")
 
 
 # ----------------------------------------------------
@@ -341,13 +442,13 @@ def _set_log_config(cfg):
     curr_file = logging_cfg.get("file", "src/logs/app.log")
     curr_level = logging_cfg.get("level", "INFO")
     
-    print(f"{ui.HL}┌── [ 현재 설정 내용 ] ──────────────────────────────────────────────┐{ui.FG}")
-    print(f"│  * 현재 로그 파일 경로 : {curr_file}")
-    print(f"│  * 현재 기록 로그 수준 : {curr_level}")
-    print(f"│  * 안내 : 로그 파일명(app.log)은 고정되며 폴더 위치만 설정합니다.")
-    print(f"{ui.HL}└────────────────────────────────────────────────────────────────────┘{ui.FG}\n")
-    
-    print("  예시) 'logs' 또는 'src/logs' 입력 시 -> src/logs/app.log 로 자동 지정됩니다.")
+    ui.draw_line("─")
+    print(f"{ui.HL}  [ 현재 로그 설정 내용 ]{ui.FG}")
+    print(f"  • 현재 로그 파일 경로 : {curr_file}")
+    print(f"  • 현재 기록 로그 수준 : {curr_level}")
+    print(f"  • 안내 : 로그 파일명(app.log)은 고정되며 폴더 위치만 설정합니다.")
+    ui.draw_line("─")
+    print("\n  예시) 'logs' 또는 'src/logs' 입력 시 -> src/logs/app.log 로 지정됩니다.")
     
     new_dir = _prompt("새로운 로그 폴더 입력", str(Path(curr_file).parent))
     if new_dir is None: return
@@ -376,4 +477,4 @@ def _set_log_config(cfg):
     config_mgr.save_config(cfg)
     
     print(f"\n{ui.HL}>> 로그 경로 [{final_log_file}], 수준 [{selected_level}]로 저장되었습니다!{ui.FG}")
-    input("[Enter]를 누르세요...")
+    ui.pause("[Enter]를 누르세요...")

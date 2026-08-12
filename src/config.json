@@ -26,7 +26,7 @@
             "enabled": true
         },
         {
-            "name": "ArXiv cs.AI",
+            "name": "ArXiv_cs.AI",
             "method": "rss",
             "url": "http://export.arxiv.org/rss/cs.AI",
             "uri": "http://export.arxiv.org/rss/cs.AI",
