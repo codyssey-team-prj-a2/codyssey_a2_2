@@ -36,10 +36,26 @@ def initialize_db():
         with get_db_connection() as conn:
             conn.executescript(schema_script)
             conn.commit()
+            _migrate_schema(conn)
         return True
     except Exception as e:
         print(f"[DB 초기화 에러] {e}")
         return False
+
+def _migrate_schema(conn):
+    """
+    기존에 생성된 DB에 schema.sql 신규 컬럼(예: sentiment)이 없다면 추가한다.
+    CREATE TABLE IF NOT EXISTS 는 이미 존재하는 테이블의 컬럼을 갱신하지 않기 때문에 필요하다.
+    """
+    existing_cols = {row["name"] for row in conn.execute("PRAGMA table_info(clean_news)")}
+    migrations = {
+        "sentiment": "ALTER TABLE clean_news ADD COLUMN sentiment TEXT",
+        "sentiment_reason": "ALTER TABLE clean_news ADD COLUMN sentiment_reason TEXT",
+    }
+    for col, ddl in migrations.items():
+        if col not in existing_cols:
+            conn.execute(ddl)
+    conn.commit()
 
 # ==========================================
 # 2. 팀원들을 위한 데이터 조작 함수 모음
@@ -298,6 +314,67 @@ def get_news_by_id(news_id):
     except Exception as e:
         print(f"[DB Select 에러] {e}")
         return None
+
+# ==========================================
+# 6. 감성 분석용 SQL [보너스] (sentiment.py 작업자용)
+# ==========================================
+
+def get_news_for_sentiment(target="unanalyzed", news_id=None, limit=10):
+    """
+    [ sentiment.py 작업자용 ]
+    감성 분석 대상 뉴스를 조회합니다.
+
+    :param target: "unanalyzed"(sentiment IS NULL 인 기사만, 기본), "all"(전체), "id"(단건)
+    """
+    if target == "id":
+        if not news_id:
+            return []
+        sql = "SELECT news_id, title, ai_summary, content FROM clean_news WHERE news_id = ?"
+        params = (news_id,)
+    elif target == "all":
+        sql = "SELECT news_id, title, ai_summary, content FROM clean_news LIMIT ?"
+        params = (limit,)
+    else:
+        sql = "SELECT news_id, title, ai_summary, content FROM clean_news WHERE sentiment IS NULL LIMIT ?"
+        params = (limit,)
+
+    try:
+        with get_db_connection() as conn:
+            rows = conn.execute(sql, params).fetchall()
+            return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[DB Select 에러] {e}")
+        return []
+
+def update_sentiment(news_id, sentiment, reason):
+    """
+    [ sentiment.py 작업자용 ]
+    특정 뉴스의 AI 감성 분석 결과(긍정/부정/중립, 이유)를 저장합니다.
+    """
+    sql = "UPDATE clean_news SET sentiment = ?, sentiment_reason = ? WHERE news_id = ?"
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(sql, (sentiment, reason, news_id))
+            conn.commit()
+            return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[DB Update 에러] {e}")
+        return False
+
+def get_sentiment_distribution():
+    """
+    [ report.py 작업자용 ]
+    감성 분석이 완료된 뉴스의 감성별 분포(긍정/부정/중립)를 집계합니다.
+    """
+    sql = "SELECT sentiment, COUNT(*) AS cnt FROM clean_news WHERE sentiment IS NOT NULL GROUP BY sentiment"
+    try:
+        with get_db_connection() as conn:
+            rows = conn.execute(sql).fetchall()
+            return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[DB Select 에러] {e}")
+        return []
 
 def upsert_ai_insight(insight_data):
     """

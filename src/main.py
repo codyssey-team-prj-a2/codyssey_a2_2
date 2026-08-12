@@ -2,8 +2,8 @@
 import sys
 from lib.system import config_mgr, ui
 
-# 1번부터 7번까지 모든 개발 모듈 + 8, 9번 보너스 모듈 일괄 임포트
-from lib.dev import setup, fetch, clean, summarize, analyze, report, export, list_news, show
+# 1번부터 7번까지 모든 개발 모듈 + 8~10번 보너스 모듈 일괄 임포트
+from lib.dev import setup, fetch, clean, summarize, analyze, report, export, list_news, show, sentiment
 
 # [라우터 맵] 선택 번호와 해당 모듈의 실행 함수 매핑
 MODULE_MAP = {
@@ -16,6 +16,7 @@ MODULE_MAP = {
     '7': export.run_menu_show,
     '8': list_news.run_menu_show,
     '9': show.run_menu_show,
+    '10': sentiment.run_menu_show,
 }
 
 def run_tui():
@@ -38,6 +39,7 @@ def run_tui():
         print("  7. 데이터 내보내기 (export)")
         print("  8. 뉴스 목록 조회 (list) [보너스]")
         print("  9. 뉴스 상세 조회 (show) [보너스]")
+        print(" 10. AI 감성 분석 (sentiment) [보너스]")
         print("\n  Q. 시스템 종료\n")
         
         ui.draw_line("─")

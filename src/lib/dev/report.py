@@ -87,6 +87,33 @@ def chart_daily_trend():
     return path
 
 
+def chart_sentiment_distribution():
+    """[보너스] 감성 분석 결과(긍정/부정/중립) 분포 원형 차트를 생성해 PNG로 저장하고 경로를 반환합니다."""
+    _setup_korean_font()
+    rows = sqlite_mgr.get_sentiment_distribution()
+
+    path = os.path.join(_charts_dir(), "sentiment_distribution.png")
+    fig, ax = plt.subplots(figsize=(6, 6))
+    if rows:
+        labels = [row["sentiment"] for row in rows]
+        counts = [row["cnt"] for row in rows]
+        colors = {"긍정": "#55A868", "부정": "#C44E52", "중립": "#8172B2"}
+        ax.pie(
+            counts,
+            labels=labels,
+            colors=[colors.get(label, "#4C72B0") for label in labels],
+            autopct="%1.1f%%",
+            startangle=90,
+            counterclock=False,
+        )
+        ax.axis("equal")
+    ax.set_title("뉴스 감성 분포")
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+    return path
+
+
 def _raw_news_count():
     """
     raw 저장소(JSONL, data/raw/*.jsonl)에 적재된 전체 원본 뉴스 건수를 셉니다.
@@ -325,6 +352,7 @@ def run_menu_show():
         print("  4. 품질 지표 조회 (정제 통과율, AI 요약 성공률)")
         print("  5. TOP N 집계 조회 (핵심 키워드 TOP5, 카테고리 TOP3)")
         print("  6. 종합 리포트 생성 (대화형 파라미터 입력)")
+        print("  7. 감성 분포 차트 생성 [보너스]")
         print("  p. 이전 메뉴로 돌아가기 (상위 메뉴)\n")
 
         print(f"{ui.HL}  [ CLI 직접 입력 예시 ]{ui.FG}")
@@ -342,7 +370,8 @@ def run_menu_show():
             _generate_and_report(chart_daily_trend, "일자별 뉴스 수집 추이 차트")
         elif choice == '3':
             try:
-                paths = [chart_category_distribution(), chart_daily_trend()]
+                paths = [chart_category_distribution(), chart_daily_trend(),
+                         chart_sentiment_distribution()]
                 print(f"\n{ui.HL}>> 차트 {len(paths)}건이 생성되었습니다.{ui.FG}")
                 for path in paths:
                     print(f"   - {path}")
@@ -355,6 +384,8 @@ def run_menu_show():
             show_top_n()
         elif choice == '6':
             run_report_interactive()
+        elif choice == '7':
+            _generate_and_report(chart_sentiment_distribution, "감성 분포 차트")
         elif choice.startswith("report"):
             run_report_cli(choice)
         else:
