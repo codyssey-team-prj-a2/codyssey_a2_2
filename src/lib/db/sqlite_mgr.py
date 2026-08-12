@@ -199,6 +199,45 @@ def get_keyword_top_n(n=5):
                 counter[keyword] += 1
     return counter.most_common(n)
 
+# ==========================================
+# 4. 내보내기용 조회 SQL (export.py 작업자용)
+# ==========================================
+
+def get_news_for_export(status="all", date_from=None, date_to=None):
+    """
+    [ export.py 작업자용 ]
+    CSV/Excel/JSONL로 내보낼 clean_news 목록을 조회합니다.
+
+    :param status: "all"(전체) 또는 "summarized"(is_summarized=1 인 기사만)
+    :param date_from: 조회 시작일 (YYYY-MM-DD), date_to 와 함께 지정 시 BETWEEN 필터 적용
+    :param date_to: 조회 종료일 (YYYY-MM-DD)
+    """
+    sql = """
+        SELECT news_id, source, category, title, content, pub_date,
+               ai_summary, is_summarized, created_at
+        FROM clean_news
+    """
+    conditions = []
+    params = []
+
+    if status == "summarized":
+        conditions.append("is_summarized = 1")
+    if date_from and date_to:
+        conditions.append("pub_date BETWEEN ? AND ?")
+        params += [date_from, date_to]
+
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+    sql += " ORDER BY pub_date, news_id"
+
+    try:
+        with get_db_connection() as conn:
+            rows = conn.execute(sql, params).fetchall()
+            return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[DB Select 에러] {e}")
+        return []
+
 def upsert_ai_insight(insight_data):
     """
     [ analyze.py 작업자용 ]
