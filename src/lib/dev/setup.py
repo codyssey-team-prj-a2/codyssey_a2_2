@@ -1,4 +1,5 @@
 # lib/dev/setup.py
+import re
 from pathlib import Path
 from lib.system import config_mgr, ui
 
@@ -17,6 +18,12 @@ PROVIDER_LABELS = {
 METHOD_LABELS = {"rss": "RSS", "api": "API", "crawl": "크롤링"}
 
 
+def _is_valid_url(url):
+    """http:// 또는 https:// 로 시작하는 주소 형식 유효성 검사"""
+    pattern = re.compile(r'^https?://[^\s/$.?#].[^\s]*$', re.IGNORECASE)
+    return bool(pattern.match(url))
+
+
 def _prompt(msg, current_val=None, allow_enter_keep=True):
     """공통 프롬프트 (readline 겹침 방지 ui.rl_color 적용)"""
     hints = ["C: 취소"]
@@ -28,7 +35,6 @@ def _prompt(msg, current_val=None, allow_enter_keep=True):
     hint_str = f" [{ ' | '.join(hints) }]"
     
     ui.draw_line("─")
-    # ui.rl_color를 적용하여 입력 중 글자 겹침 버그 방지
     prompt_str = f"{ui.rl_color(ui.FG)}{msg}{ui.rl_color(ui.HL)}{hint_str} > {ui.rl_color(ui.FG)}"
     val = input(prompt_str).strip()
     
@@ -41,12 +47,10 @@ def _prompt(msg, current_val=None, allow_enter_keep=True):
 
 
 def run_menu_show():
-    """TUI 환경 설정 메인 메뉴 루프 (실제 데이터 기반 상태 체크)"""
+    """TUI 환경 설정 메인 메뉴 루프"""
     while True:
         ui.clear_screen()
         cfg = config_mgr.load_config()
-        
-        # [수정] 플래그가 아닌 실제 데이터 검증 결과 사용
         status_map = config_mgr.get_setup_status()
         
         ui.draw_header("시스템 환경 설정 메뉴")
@@ -60,7 +64,7 @@ def run_menu_show():
         print(f"  2. 뉴스 소스 관리 (목록/추가/수정/삭제) [{news_st}]")
         print(f"  3. DB 저장 폴더 경로 설정")
         print(f"  4. 로그 폴더 경로/수준 설정     [{log_st}]")
-        print("\n  p. 메인 화면으로 돌아가기\n")
+        print("\n  P. 메인 화면으로 돌아가기\n")
         
         choice = _prompt("설정할 번호를 선택하세요", allow_enter_keep=False)
         if choice is None or choice.lower() == 'p': 
@@ -74,8 +78,14 @@ def run_menu_show():
             _set_db_path(cfg)
         elif choice == '4':
             _set_log_config(cfg)
+        else:
+            print(f"\n{ui.ERR}[오류] 올바른 번호(1~4) 또는 'P'를 입력해 주세요.{ui.FG}")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")
 
 
+# ----------------------------------------------------
+# 1. AI 환경 설정
+# ----------------------------------------------------
 def _set_api_key(cfg):
     """AI 환경 설정 메인 현황 조회"""
     while True:
@@ -86,7 +96,6 @@ def _set_api_key(cfg):
         curr_model = config_mgr.get_env("LLM_MODEL") or ""
         curr_key = config_mgr.get_env("LLM_API_KEY") or ""
         
-        # 실제 데이터 유효성 판단
         has_existing = config_mgr.is_ai_setup_complete()
         
         ui.draw_line("─")
@@ -100,8 +109,7 @@ def _set_api_key(cfg):
         print()
         
         if has_existing:
-            print("  1. AI 환경 설정 변경")
-            print("  p. 상위 메뉴로 이동\n")
+            print("  1. AI 환경 설정 변경\n")
             ui.draw_line("─")
             prompt_str = f"{ui.rl_color(ui.HL)}입력 (1: 설정 변경 / p: 상위 메뉴로) > {ui.rl_color(ui.FG)}"
             cmd = input(prompt_str).strip().lower()
@@ -114,7 +122,7 @@ def _set_api_key(cfg):
                 print(f"\n{ui.ERR}[오류] 올바른 번호(1) 또는 'p'를 입력해 주세요.{ui.FG}")
                 ui.pause("다시 시도하려면 [Enter]를 누르세요...")
         else:
-            print("  1. AI 환경 신규 설정")
+            print("  1. AI 환경 신규 설정\n")
             print("  p. 상위 메뉴로 이동\n")
             ui.draw_line("─")
             prompt_str = f"{ui.rl_color(ui.HL)}입력 (1: 신규 설정 진행 / p: 상위 메뉴로) > {ui.rl_color(ui.FG)}"
@@ -144,14 +152,14 @@ def _edit_api_key_wizard(cfg, curr_prov, curr_model, curr_key):
     ui.draw_line("─")
     
     if curr_prov:
-        hint_str = f"[p: 상위 메뉴로 | C: 취소 | Enter: 현재 설정 유지 ({prov_label})]"
+        hint_str = f"[C: 취소 | Enter: 현재 설정 유지 ({prov_label})]"
     else:
-        hint_str = "[p: 상위 메뉴로 | C: 취소]"
+        hint_str = "[C: 취소]"
         
     prompt_str = f"{ui.rl_color(ui.HL)}{hint_str} > {ui.rl_color(ui.FG)}"
     prov_choice = input(prompt_str).strip()
     
-    if prov_choice.lower() in ['p', 'c']:
+    if prov_choice.lower() == 'c':
         print(f"\n{ui.HL}>> 변경 작업을 취소했습니다.{ui.FG}")
         ui.pause("[Enter]를 누르세요...")
         return
@@ -176,10 +184,10 @@ def _edit_api_key_wizard(cfg, curr_prov, curr_model, curr_key):
     if curr_model and provider == curr_prov:
         print(f"{ui.FG}▶ 사용할 모델명을 입력하세요.")
         ui.draw_line("─")
-        prompt_str = f"{ui.rl_color(ui.HL)}[p: 상위 메뉴로 | C: 취소 | Enter: 현재 설정 유지 ({curr_model})] > {ui.rl_color(ui.FG)}"
+        prompt_str = f"{ui.rl_color(ui.HL)}[C: 취소 | Enter: 현재 설정 유지 ({curr_model})] > {ui.rl_color(ui.FG)}"
         model_input = input(prompt_str).strip()
         
-        if model_input.lower() in ['p', 'c']:
+        if model_input.lower() == 'c':
             print(f"\n{ui.HL}>> 변경 작업을 취소했습니다.{ui.FG}")
             ui.pause("[Enter]를 누르세요...")
             return
@@ -188,10 +196,10 @@ def _edit_api_key_wizard(cfg, curr_prov, curr_model, curr_key):
         default_m = DEFAULT_MODELS.get(provider, "gemini-1.5-flash")
         print(f"{ui.FG}▶ 사용할 모델명을 입력하세요 (추천: {default_m}).")
         ui.draw_line("─")
-        prompt_str = f"{ui.rl_color(ui.HL)}[p: 상위 메뉴로 | C: 취소 | Enter: 추천 모델 ({default_m}) 적용] > {ui.rl_color(ui.FG)}"
+        prompt_str = f"{ui.rl_color(ui.HL)}[C: 취소 | Enter: 추천 모델 ({default_m}) 적용] > {ui.rl_color(ui.FG)}"
         model_input = input(prompt_str).strip()
         
-        if model_input.lower() in ['p', 'c']:
+        if model_input.lower() == 'c':
             print(f"\n{ui.HL}>> 변경 작업을 취소했습니다.{ui.FG}")
             ui.pause("[Enter]를 누르세요...")
             return
@@ -202,17 +210,17 @@ def _edit_api_key_wizard(cfg, curr_prov, curr_model, curr_key):
     print(f"{ui.FG}▶ API Key를 입력하세요 (마스킹되어 저장됩니다).")
     ui.draw_line("─")
     if curr_key:
-        prompt_str = f"{ui.rl_color(ui.HL)}[p: 상위 메뉴로 | C: 취소 | Enter: 현재 설정 유지] > {ui.rl_color(ui.FG)}"
+        prompt_str = f"{ui.rl_color(ui.HL)}[C: 취소 | Enter: 현재 설정 유지] > {ui.rl_color(ui.FG)}"
         key_input = input(prompt_str).strip()
-        if key_input.lower() in ['p', 'c']:
+        if key_input.lower() == 'c':
             print(f"\n{ui.HL}>> 변경 작업을 취소했습니다.{ui.FG}")
             ui.pause("[Enter]를 누르세요...")
             return
         key = curr_key if not key_input else key_input
     else:
-        prompt_str = f"{ui.rl_color(ui.HL)}[p: 상위 메뉴로 | C: 취소] > {ui.rl_color(ui.FG)}"
+        prompt_str = f"{ui.rl_color(ui.HL)}[C: 취소] > {ui.rl_color(ui.FG)}"
         key_input = input(prompt_str).strip()
-        if key_input.lower() in ['p', 'c']:
+        if key_input.lower() == 'c':
             print(f"\n{ui.HL}>> 변경 작업을 취소했습니다.{ui.FG}")
             ui.pause("[Enter]를 누르세요...")
             return
@@ -227,7 +235,6 @@ def _edit_api_key_wizard(cfg, curr_prov, curr_model, curr_key):
     config_mgr.set_env("LLM_MODEL", model)
     config_mgr.set_env("LLM_API_KEY", key)
     
-    # 동적 검증으로 대체되었으므로 보조 플래그만 기록
     cfg["setup_ai"] = True
     config_mgr.save_config(cfg)
     
@@ -235,10 +242,13 @@ def _edit_api_key_wizard(cfg, curr_prov, curr_model, curr_key):
     ui.pause("[Enter]를 누르면 AI 환경 설정 현황으로 돌아갑니다...")
 
 
+# ----------------------------------------------------
+# 2. 뉴스 소스 관리 (Req 1~6 적용 완료)
+# ----------------------------------------------------
 def _manage_news_sources(cfg):
     while True:
         ui.clear_screen()
-        ui.draw_header("뉴스 소스 관리")
+        ui.draw_header(" 뉴스 소스 관리 ")
         sources = cfg.setdefault("news_sources", [])
         
         ui.draw_line("─")
@@ -258,11 +268,14 @@ def _manage_news_sources(cfg):
         
         print("  1. 신규 뉴스 소스 추가")
         print("  2. 기존 뉴스 소스 수정")
-        print("  3. 기존 뉴스 소스 삭제")
-        print("  p. 메인 설정 메뉴로 돌아가기\n")
+        print("  3. 기존 뉴스 소스 삭제\n")
         
-        choice = _prompt("작업할 번호를 선택하세요", allow_enter_keep=False)
-        if choice is None or choice.lower() == 'p':
+        # Req 5: 프롬프트 옆에 (p: 상위 메뉴로 이동) 명시
+        ui.draw_line("─")
+        prompt_str = f"{ui.rl_color(ui.HL)}입력 (메뉴번호 / p: 상위 메뉴로 이동) > {ui.rl_color(ui.FG)}"
+        choice = input(prompt_str).strip().lower()
+        
+        if choice == 'p':
             break
             
         if choice == '1':
@@ -274,30 +287,103 @@ def _manage_news_sources(cfg):
 
 
 def _add_source_action(cfg):
-    print("\n[ 신규 뉴스 소스 추가 ]")
+    """신규 뉴스 소스 추가 (Req 1, 2, 3, 4, 5 적용)"""
+    ui.clear_screen()
+    ui.draw_header(" 신규 뉴스 소스 추가 ")
     sources = cfg.get("news_sources", [])
     
-    name = _prompt("소스 이름 입력 (예: naver_it_rss)")
-    if not name: return
+    # [1] 소스 이름 입력 (Req 1 적용)
+    while True:
+        print(f"\n{ui.FG}▶ 소스 이름을 입력하세요 (공백 불가, 예: naver_it_rss).")
+        ui.draw_line("─")
+        prompt_str = f"{ui.rl_color(ui.HL)}[C: 취소] > {ui.rl_color(ui.FG)}"
+        name = input(prompt_str).strip()
+        
+        if name.lower() == 'c':
+            print(f"\n{ui.HL}>> 추가 작업을 취소했습니다.{ui.FG}")
+            ui.pause("[Enter]를 누르세요...")
+            return
+            
+        if not name:
+            print(f"\n{ui.ERR}[오류] 소스 이름은 비워둘 수 없습니다.{ui.FG}")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")
+            continue
+            
+        if " " in name:
+            print(f"\n{ui.ERR}[오류] 소스 이름에는 공백(띄어쓰기)을 포함할 수 없습니다.{ui.FG}")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")
+            continue
+            
+        if any(s.get("name") == name for s in sources):
+            print(f"\n{ui.ERR}[오류] 이미 등록된 소스 이름입니다: {name}{ui.FG}")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")
+            continue
+            
+        break
+
+    # [2] 수집 방식 선택 (Req 2, 3 적용)
+    while True:
+        print()
+        print(f"{ui.HL}  [ 수집 방식 선택 ]{ui.FG}")
+        print("  1) RSS  2) API  3) 크롤링\n")
+        print(f"{ui.FG}▶ 수집 방식을 선택하세요.")
+        ui.draw_line("─")
+        prompt_str = f"{ui.rl_color(ui.HL)}[C: 취소] > {ui.rl_color(ui.FG)}"
+        m_choice = input(prompt_str).strip()
+        
+        if m_choice.lower() == 'c':
+            print(f"\n{ui.HL}>> 추가 작업을 취소했습니다.{ui.FG}")
+            ui.pause("[Enter]를 누르세요...")
+            return
+            
+        if m_choice in ["1", "2", "3"]:
+            method_map = {"1": "rss", "2": "api", "3": "crawl"}
+            method = method_map[m_choice]
+            break
+        else:
+            print(f"\n{ui.ERR}[오류] 잘못된 선택입니다. 1~3 번호 중에서 선택해 주세요.{ui.FG}")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")
+
+    # [3] 주소(URI) 입력 (Req 2, 4 적용)
+    while True:
+        print()
+        print(f"{ui.FG}▶ 주소 (URI)를 입력하세요.")
+        ui.draw_line("─")
+        prompt_str = f"{ui.rl_color(ui.HL)}[C: 취소] > {ui.rl_color(ui.FG)}"
+        uri = input(prompt_str).strip()
+        
+        if uri.lower() == 'c':
+            print(f"\n{ui.HL}>> 추가 작업을 취소했습니다.{ui.FG}")
+            ui.pause("[Enter]를 누르세요...")
+            return
+            
+        if not uri:
+            print(f"\n{ui.ERR}[오류] 주소(URI)는 비워둘 수 없습니다.{ui.FG}")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")
+            continue
+            
+        if not _is_valid_url(uri):
+            print(f"\n{ui.ERR}[오류] 올바른 주소 형태(http:// 또는 https://)가 아닙니다. 다시 확인해 주세요.{ui.FG}")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")
+            continue
+            
+        break
+
+    # [4] 카테고리 입력
+    print()
+    print(f"{ui.FG}▶ 카테고리를 입력하세요.")
+    ui.draw_line("─")
+    prompt_str = f"{ui.rl_color(ui.HL)}[C: 취소 | Enter: 기본값 (종합) 적용] > {ui.rl_color(ui.FG)}"
+    cat_input = input(prompt_str).strip()
     
-    if any(s.get("name") == name for s in sources):
-        print(f"\n{ui.ERR}이미 등록된 소스 이름입니다: {name}{ui.FG}")
+    if cat_input.lower() == 'c':
+        print(f"\n{ui.HL}>> 추가 작업을 취소했습니다.{ui.FG}")
         ui.pause("[Enter]를 누르세요...")
         return
         
-    print("\n  [ 수집 방식 선택 ] 1) RSS  2) API  3) 크롤링")
-    m_choice = _prompt("번호 선택 (1-3)", "1")
-    if m_choice is None: return
+    category = cat_input if cat_input else "종합"
     
-    method_map = {"1": "rss", "2": "api", "3": "crawl"}
-    method = method_map.get(m_choice, "rss")
-    
-    uri = _prompt("주소 (URI) 입력")
-    if not uri: return
-    
-    category = _prompt("카테고리 입력", "종합")
-    if category is None: return
-    
+    # 데이터 저장
     sources.append({
         "name": name,
         "method": method,
@@ -313,87 +399,215 @@ def _add_source_action(cfg):
 
 
 def _edit_source_action(cfg):
+    """기존 뉴스 소스 수정"""
     sources = cfg.get("news_sources", [])
     if not sources:
-        print("\n수정할 뉴스 소스가 없습니다.")
+        print(f"\n{ui.ERR}수정할 뉴스 소스가 없습니다.{ui.FG}")
         ui.pause("[Enter]를 누르세요...")
         return
         
-    print("\n[ 뉴스 소스 수정 ]")
-    idx_str = _prompt(f"수정할 소스 번호를 선택하세요 (1~{len(sources)})")
-    if not idx_str: return
+    ui.clear_screen()
+    ui.draw_header(" 뉴스 소스 수정 ")
     
+    print(f"{ui.HL}  [ 수정할 뉴스 소스 선택 ]{ui.FG}")
+    for idx, s in enumerate(sources, 1):
+        print(f"  {idx}. {s.get('name', '이름없음')} ({s.get('method', 'rss').upper()})")
+    print()
+    
+    ui.draw_line("─")
+    prompt_str = f"{ui.rl_color(ui.HL)}[C: 취소] 번호 선택 > {ui.rl_color(ui.FG)}"
+    idx_str = input(prompt_str).strip()
+    
+    if idx_str.lower() == 'c':
+        print(f"\n{ui.HL}>> 수정 작업을 취소했습니다.{ui.FG}")
+        ui.pause("[Enter]를 누르세요...")
+        return
+        
     try:
         idx = int(idx_str) - 1
         if not (0 <= idx < len(sources)):
-            print("\n유효하지 않은 번호입니다.")
-            ui.pause("[Enter]를 누르세요...")
+            print(f"\n{ui.ERR}[오류] 유효하지 않은 번호입니다.{ui.FG}")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")
             return
     except ValueError:
-        print("\n숫자를 입력해 주세요.")
-        ui.pause("[Enter]를 누르세요...")
+        print(f"\n{ui.ERR}[오류] 숫자를 입력해 주세요.{ui.FG}")
+        ui.pause("다시 시도하려면 [Enter]를 누르세요...")
         return
         
     target = sources[idx]
-    print(f"\n선택된 소스: {target.get('name', '이름없음')}")
-    
-    new_name = _prompt("새 소스 이름", target.get('name', ''))
-    if new_name is None: return
-    
-    print("\n  [ 수집 방식 선택 ] 1) RSS  2) API  3) 크롤링")
-    curr_m_num = {"rss": "1", "api": "2", "crawl": "3"}.get(target.get('method'), "1")
-    m_choice = _prompt("번호 선택 (1-3)", curr_m_num)
-    if m_choice is None: return
-    
-    method = {"1": "rss", "2": "api", "3": "crawl"}.get(m_choice, target.get('method', 'rss'))
-    
+    curr_name = target.get('name', '')
+    curr_method = target.get('method', 'rss')
     curr_uri = target.get('uri') or target.get('url') or ''
-    new_uri = _prompt("새 주소 (URI)", curr_uri)
-    if new_uri is None: return
+    curr_cat = target.get('category', '종합')
     
-    new_cat = _prompt("새 카테고리", target.get('category', '종합'))
-    if new_cat is None: return
+    # 1. 소스 이름 수정
+    while True:
+        print()
+        print(f"{ui.FG}▶ 새 소스 이름을 입력하세요 (공백 불가).")
+        ui.draw_line("─")
+        prompt_str = f"{ui.rl_color(ui.HL)}[C: 취소 | Enter: 현재 설정 유지 ({curr_name})] > {ui.rl_color(ui.FG)}"
+        new_name = input(prompt_str).strip()
+        
+        if new_name.lower() == 'c':
+            print(f"\n{ui.HL}>> 수정 작업을 취소했습니다.{ui.FG}")
+            ui.pause("[Enter]를 누르세요...")
+            return
+            
+        if not new_name:
+            final_name = curr_name
+            break
+            
+        if " " in new_name:
+            print(f"\n{ui.ERR}[오류] 소스 이름에는 공백(띄어쓰기)을 포함할 수 없습니다.{ui.FG}")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")
+            continue
+            
+        if new_name != curr_name and any(s.get("name") == new_name for s in sources):
+            print(f"\n{ui.ERR}[오류] 이미 등록된 다른 소스 이름입니다: {new_name}{ui.FG}")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")
+            continue
+            
+        final_name = new_name
+        break
+
+    # 2. 수집 방식 수정
+    while True:
+        print()
+        print(f"{ui.HL}  [ 수집 방식 선택 ]{ui.FG}")
+        print("  1) RSS  2) API  3) 크롤링\n")
+        print(f"{ui.FG}▶ 수집 방식을 선택하세요.")
+        ui.draw_line("─")
+        m_label = METHOD_LABELS.get(curr_method, curr_method.upper())
+        prompt_str = f"{ui.rl_color(ui.HL)}[C: 취소 | Enter: 현재 설정 유지 ({m_label})] > {ui.rl_color(ui.FG)}"
+        m_choice = input(prompt_str).strip()
+        
+        if m_choice.lower() == 'c':
+            print(f"\n{ui.HL}>> 수정 작업을 취소했습니다.{ui.FG}")
+            ui.pause("[Enter]를 누르세요...")
+            return
+            
+        if not m_choice:
+            final_method = curr_method
+            break
+            
+        if m_choice in ["1", "2", "3"]:
+            method_map = {"1": "rss", "2": "api", "3": "crawl"}
+            final_method = method_map[m_choice]
+            break
+        else:
+            print(f"\n{ui.ERR}[오류] 잘못된 선택입니다. 1~3 번호 중에서 선택해 주세요.{ui.FG}")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")
+
+    # 3. 주소(URI) 수정
+    while True:
+        print()
+        print(f"{ui.FG}▶ 새 주소 (URI)를 입력하세요.")
+        ui.draw_line("─")
+        prompt_str = f"{ui.rl_color(ui.HL)}[C: 취소 | Enter: 현재 설정 유지 ({curr_uri})] > {ui.rl_color(ui.FG)}"
+        new_uri = input(prompt_str).strip()
+        
+        if new_uri.lower() == 'c':
+            print(f"\n{ui.HL}>> 수정 작업을 취소했습니다.{ui.FG}")
+            ui.pause("[Enter]를 누르세요...")
+            return
+            
+        if not new_uri:
+            final_uri = curr_uri
+            break
+            
+        if not _is_valid_url(new_uri):
+            print(f"\n{ui.ERR}[오류] 올바른 주소 형태(http:// 또는 https://)가 아닙니다. 다시 확인해 주세요.{ui.FG}")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")
+            continue
+            
+        final_uri = new_uri
+        break
+
+    # 4. 카테고리 수정
+    print()
+    print(f"{ui.FG}▶ 새 카테고리를 입력하세요.")
+    ui.draw_line("─")
+    prompt_str = f"{ui.rl_color(ui.HL)}[C: 취소 | Enter: 현재 설정 유지 ({curr_cat})] > {ui.rl_color(ui.FG)}"
+    new_cat = input(prompt_str).strip()
     
+    if new_cat.lower() == 'c':
+        print(f"\n{ui.HL}>> 수정 작업을 취소했습니다.{ui.FG}")
+        ui.pause("[Enter]를 누르세요...")
+        return
+        
+    final_cat = new_cat if new_cat else curr_cat
+
+    # 데이터 업데이트
     target.update({
-        "name": new_name,
-        "method": method,
-        "uri": new_uri,
-        "url": new_uri,
-        "category": new_cat
+        "name": final_name,
+        "method": final_method,
+        "uri": final_uri,
+        "url": final_uri,
+        "category": final_cat
     })
     config_mgr.save_config(cfg)
-    print(f"\n{ui.HL}>> 소스 [{new_name}] 수정이 완료되었습니다!{ui.FG}")
+    print(f"\n{ui.HL}>> 소스 [{final_name}] 수정이 완료되었습니다!{ui.FG}")
     ui.pause("[Enter]를 누르세요...")
 
 
 def _delete_source_action(cfg):
+    """기존 뉴스 소스 삭제 (Req 6 Y/N 절차 추가)"""
     sources = cfg.get("news_sources", [])
     if not sources:
-        print("\n삭제할 뉴스 소스가 없습니다.")
+        print(f"\n{ui.ERR}삭제할 뉴스 소스가 없습니다.{ui.FG}")
         ui.pause("[Enter]를 누르세요...")
         return
         
-    print("\n[ 뉴스 소스 삭제 ]")
-    idx_str = _prompt(f"삭제할 소스 번호를 선택하세요 (1~{len(sources)})")
-    if not idx_str: return
+    ui.clear_screen()
+    ui.draw_header(" 뉴스 소스 삭제 ")
     
+    print(f"{ui.HL}  [ 삭제할 뉴스 소스 선택 ]{ui.FG}")
+    for idx, s in enumerate(sources, 1):
+        print(f"  {idx}. {s.get('name', '이름없음')} ({s.get('method', 'rss').upper()})")
+    print()
+    
+    ui.draw_line("─")
+    prompt_str = f"{ui.rl_color(ui.HL)}[C: 취소] 번호 선택 > {ui.rl_color(ui.FG)}"
+    idx_str = input(prompt_str).strip()
+    
+    if idx_str.lower() == 'c':
+        print(f"\n{ui.HL}>> 삭제 작업을 취소했습니다.{ui.FG}")
+        ui.pause("[Enter]를 누르세요...")
+        return
+        
     try:
         idx = int(idx_str) - 1
-        if 0 <= idx < len(sources):
-            removed_name = sources[idx].get("name", "소스")
-            del sources[idx]
-            if not sources:
-                cfg["setup_news"] = False
-            config_mgr.save_config(cfg)
-            print(f"\n{ui.HL}>> 소스 [{removed_name}]이(가) 삭제되었습니다!{ui.FG}")
-        else:
-            print("\n유효하지 않은 번호입니다.")
+        if not (0 <= idx < len(sources)):
+            print(f"\n{ui.ERR}[오류] 유효하지 않은 번호입니다.{ui.FG}")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")
+            return
     except ValueError:
-        print("\n숫자를 입력해 주세요.")
+        print(f"\n{ui.ERR}[오류] 숫자를 입력해 주세요.{ui.FG}")
+        ui.pause("다시 시도하려면 [Enter]를 누르세요...")
+        return
+        
+    target = sources[idx]
+    target_name = target.get("name", "이름없음")
+    
+    # Req 6: Y/N 확인 절차
+    print()
+    ui.draw_line("─")
+    confirm_prompt = f"{ui.FG}▶ 정말로 [{ui.HL}{target_name}{ui.FG}] 소스를 삭제하시겠습니까? (y/n) > {ui.rl_color(ui.HL)}"
+    confirm = input(confirm_prompt).strip().lower()
+    
+    if confirm == 'y':
+        del sources[idx]
+        config_mgr.save_config(cfg)
+        print(f"\n{ui.HL}>> 뉴스 소스 [{target_name}]이(가) 삭제되었습니다!{ui.FG}")
+    else:
+        print(f"\n{ui.HL}>> 삭제 작업을 취소하였습니다.{ui.FG}")
         
     ui.pause("[Enter]를 누르세요...")
 
 
+# ----------------------------------------------------
+# 3. DB 저장 폴더 경로 설정
+# ----------------------------------------------------
 def _set_db_path(cfg):
     ui.clear_screen()
     ui.draw_header("DB 저장 폴더 경로 설정")
@@ -423,6 +637,9 @@ def _set_db_path(cfg):
     ui.pause("[Enter]를 누르세요...")
 
 
+# ----------------------------------------------------
+# 4. 로그 폴더 경로 및 수준 설정
+# ----------------------------------------------------
 def _set_log_config(cfg):
     ui.clear_screen()
     ui.draw_header("로그 폴더 경로 및 수준 설정")
