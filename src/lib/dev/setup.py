@@ -287,6 +287,9 @@ def _manage_news_sources(cfg):
             _edit_source_action(cfg)
         elif choice == '3':
             _delete_source_action(cfg)
+        else:
+            print(f"\n{ui.ERR}[오류] 올바른 번호(1~3) 또는 'P'를 입력해 주세요.{ui.FG}")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")
 
 
 def _add_source_action(cfg):
