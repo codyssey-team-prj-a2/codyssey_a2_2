@@ -33,10 +33,10 @@
   "setup_ai": true,
   "setup_news": true,
   "storage": {
-    "db_path": "src\\2\\news_pipeline.db"
+    "db_path": "./data/codyssey.db"
   },
   "logging": {
-    "file": "src\\8\\app.log",
-    "level": "ERROR"
+    "file": "./logs/app.log",
+    "level": "INFO"
   }
 }
