@@ -26,3 +26,5 @@ env/
 data/
 logs/
 *.jsonl
+.DS_Store
+.keep
