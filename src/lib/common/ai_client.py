@@ -40,20 +40,30 @@ def _api_key():
 
 
 def _call_openai(model, api_key, system_prompt, user_prompt, json_output, max_tokens):
-    from openai import OpenAI
+    # openai SDK 대신 requests를 직접 쓴다: 일부 OpenAI 호환 게이트웨이(WAF)가
+    # SDK의 기본 User-Agent/헤더 지문을 차단하지만 일반 HTTP 클라이언트는 허용하기 때문.
+    import requests
 
-    client = OpenAI(api_key=api_key)
-    kwargs = {"response_format": {"type": "json_object"}} if json_output else {}
-    resp = client.chat.completions.create(
-        model=model,
-        max_tokens=max_tokens,
-        messages=[
+    base_url = (config_mgr.get_env("OPENAI_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
+    payload = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        **kwargs,
+    }
+    if json_output:
+        payload["response_format"] = {"type": "json_object"}
+
+    resp = requests.post(
+        f"{base_url}/chat/completions",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json=payload,
+        timeout=30,
     )
-    return resp.choices[0].message.content or ""
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"] or ""
 
 
 def _call_anthropic(model, api_key, system_prompt, user_prompt, json_output, max_tokens):
@@ -100,6 +110,9 @@ PROVIDER_HANDLERS = {
 
 
 def _status_code(e):
+    response = getattr(e, "response", None)
+    if response is not None:
+        return getattr(response, "status_code", None)
     return getattr(e, "status_code", None) or getattr(e, "code", None)
 
 
