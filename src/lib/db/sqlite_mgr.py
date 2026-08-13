@@ -36,10 +36,26 @@ def initialize_db():
         with get_db_connection() as conn:
             conn.executescript(schema_script)
             conn.commit()
+            _migrate_schema(conn)
         return True
     except Exception as e:
         print(f"[DB 초기화 에러] {e}")
         return False
+
+def _migrate_schema(conn):
+    """
+    기존에 생성된 DB에 schema.sql 신규 컬럼(예: sentiment)이 없다면 추가한다.
+    CREATE TABLE IF NOT EXISTS 는 이미 존재하는 테이블의 컬럼을 갱신하지 않기 때문에 필요하다.
+    """
+    existing_cols = {row["name"] for row in conn.execute("PRAGMA table_info(clean_news)")}
+    migrations = {
+        "sentiment": "ALTER TABLE clean_news ADD COLUMN sentiment TEXT",
+        "sentiment_reason": "ALTER TABLE clean_news ADD COLUMN sentiment_reason TEXT",
+    }
+    for col, ddl in migrations.items():
+        if col not in existing_cols:
+            conn.execute(ddl)
+    conn.commit()
 
 # ==========================================
 # 2. 팀원들을 위한 데이터 조작 함수 모음
@@ -113,6 +129,252 @@ def update_ai_summary(news_id, ai_summary):
     except Exception as e:
         print(f"[DB Update 에러] {e}")
         return False
+
+# ==========================================
+# 3. 품질 지표 및 TOP N 집계 SQL (report.py 작업자용)
+# ==========================================
+
+def get_clean_news_count(date_from=None, date_to=None):
+    """
+    [ report.py 작업자용 ]
+    clean_news 테이블의 전체(또는 기간 내) 건수를 셉니다.
+    """
+    sql = "SELECT COUNT(*) AS cnt FROM clean_news"
+    params = []
+    if date_from and date_to:
+        sql += " WHERE pub_date BETWEEN ? AND ?"
+        params = [date_from, date_to]
+    try:
+        with get_db_connection() as conn:
+            row = conn.execute(sql, params).fetchone()
+            return row["cnt"] if row else 0
+    except Exception as e:
+        print(f"[DB Select 에러] {e}")
+        return 0
+
+def get_summarize_success_rate():
+    """
+    [ report.py 작업자용 ]
+    ② AI 요약 성공률 = (요약 성공 건수 / 요약 시도 대상 전체 건수) * 100
+    is_summarized=1 인 건수를 성공 건수로, clean_news 전체 건수를 시도 대상으로 집계합니다.
+    """
+    sql = "SELECT COUNT(*) AS total, SUM(is_summarized) AS success FROM clean_news"
+    try:
+        with get_db_connection() as conn:
+            row = conn.execute(sql).fetchone()
+        total = row["total"] or 0
+        success = row["success"] or 0
+        rate = round((success / total) * 100, 2) if total else 0.0
+        return {"total_target": total, "success_count": success, "rate": rate}
+    except Exception as e:
+        print(f"[DB Select 에러] {e}")
+        return {"total_target": 0, "success_count": 0, "rate": 0.0}
+
+def get_category_top_n(n=3, date_from=None, date_to=None):
+    """
+    [ report.py 작업자용 ]
+    ② 카테고리별 뉴스 수집량 TOP N (기본 3) 을 GROUP BY + LIMIT 으로 집계합니다.
+    """
+    sql = "SELECT category, COUNT(*) AS cnt FROM clean_news"
+    params = []
+    if date_from and date_to:
+        sql += " WHERE pub_date BETWEEN ? AND ?"
+        params = [date_from, date_to]
+    sql += " GROUP BY category ORDER BY cnt DESC LIMIT ?"
+    params.append(n)
+    try:
+        with get_db_connection() as conn:
+            rows = conn.execute(sql, params).fetchall()
+            return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[DB Select 에러] {e}")
+        return []
+
+def get_keyword_top_n(n=5):
+    """
+    [ report.py 작업자용 ]
+    ① 최다 출현 핵심 키워드 TOP N (기본 5).
+    ai_insight.core_keywords (콤마 구분 문자열)를 모두 모아 collections.Counter로 집계합니다.
+    """
+    from collections import Counter
+
+    sql = "SELECT core_keywords FROM ai_insight"
+    try:
+        with get_db_connection() as conn:
+            rows = conn.execute(sql).fetchall()
+    except Exception as e:
+        print(f"[DB Select 에러] {e}")
+        return []
+
+    counter = Counter()
+    for row in rows:
+        keywords = row["core_keywords"] or ""
+        for keyword in keywords.split(","):
+            keyword = keyword.strip()
+            if keyword:
+                counter[keyword] += 1
+    return counter.most_common(n)
+
+# ==========================================
+# 4. 내보내기용 조회 SQL (export.py 작업자용)
+# ==========================================
+
+def get_news_for_export(status="all", date_from=None, date_to=None):
+    """
+    [ export.py 작업자용 ]
+    CSV/Excel/JSONL로 내보낼 clean_news 목록을 조회합니다.
+
+    :param status: "all"(전체) 또는 "summarized"(is_summarized=1 인 기사만)
+    :param date_from: 조회 시작일 (YYYY-MM-DD), date_to 와 함께 지정 시 BETWEEN 필터 적용
+    :param date_to: 조회 종료일 (YYYY-MM-DD)
+    """
+    sql = """
+        SELECT news_id, source, category, title, content, pub_date,
+               ai_summary, is_summarized, created_at
+        FROM clean_news
+    """
+    conditions = []
+    params = []
+
+    if status == "summarized":
+        conditions.append("is_summarized = 1")
+    if date_from and date_to:
+        conditions.append("pub_date BETWEEN ? AND ?")
+        params += [date_from, date_to]
+
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+    sql += " ORDER BY pub_date, news_id"
+
+    try:
+        with get_db_connection() as conn:
+            rows = conn.execute(sql, params).fetchall()
+            return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[DB Select 에러] {e}")
+        return []
+
+# ==========================================
+# 5. CLI 데이터 탐색용 조회 SQL (list.py / show.py 작업자용)
+# ==========================================
+
+def get_news_list(page=1, size=10, category=None):
+    """
+    [ list.py 작업자용 ]
+    clean_news 목록을 페이징(LIMIT/OFFSET)하여 조회합니다.
+
+    :return: {"items": [...], "page": 페이지 번호, "size": 페이지당 건수,
+              "total": 조건에 맞는 전체 건수, "total_pages": 전체 페이지 수}
+    """
+    page = max(page, 1)
+    size = max(size, 1)
+    offset = (page - 1) * size
+
+    where_clause = " WHERE category = ?" if category else ""
+    params = [category] if category else []
+
+    try:
+        with get_db_connection() as conn:
+            total = conn.execute(
+                f"SELECT COUNT(*) AS cnt FROM clean_news{where_clause}", params
+            ).fetchone()["cnt"]
+
+            rows = conn.execute(
+                f"""
+                SELECT news_id, source, category, title, pub_date, is_summarized
+                FROM clean_news{where_clause}
+                ORDER BY pub_date DESC, news_id
+                LIMIT ? OFFSET ?
+                """,
+                params + [size, offset],
+            ).fetchall()
+
+        total_pages = (total + size - 1) // size if total else 0
+        return {
+            "items": [dict(row) for row in rows],
+            "page": page,
+            "size": size,
+            "total": total,
+            "total_pages": total_pages,
+        }
+    except Exception as e:
+        print(f"[DB Select 에러] {e}")
+        return {"items": [], "page": page, "size": size, "total": 0, "total_pages": 0}
+
+def get_news_by_id(news_id):
+    """
+    [ show.py 작업자용 ]
+    특정 뉴스 1건의 상세 정보(본문, 요약 포함)를 조회합니다.
+    """
+    sql = "SELECT * FROM clean_news WHERE news_id = ?"
+    try:
+        with get_db_connection() as conn:
+            row = conn.execute(sql, (news_id,)).fetchone()
+            return dict(row) if row else None
+    except Exception as e:
+        print(f"[DB Select 에러] {e}")
+        return None
+
+# ==========================================
+# 6. 감성 분석용 SQL [보너스] (sentiment.py 작업자용)
+# ==========================================
+
+def get_news_for_sentiment(target="unanalyzed", news_id=None, limit=10):
+    """
+    [ sentiment.py 작업자용 ]
+    감성 분석 대상 뉴스를 조회합니다.
+
+    :param target: "unanalyzed"(sentiment IS NULL 인 기사만, 기본), "all"(전체), "id"(단건)
+    """
+    if target == "id":
+        if not news_id:
+            return []
+        sql = "SELECT news_id, title, ai_summary, content FROM clean_news WHERE news_id = ?"
+        params = (news_id,)
+    elif target == "all":
+        sql = "SELECT news_id, title, ai_summary, content FROM clean_news LIMIT ?"
+        params = (limit,)
+    else:
+        sql = "SELECT news_id, title, ai_summary, content FROM clean_news WHERE sentiment IS NULL LIMIT ?"
+        params = (limit,)
+
+    try:
+        with get_db_connection() as conn:
+            rows = conn.execute(sql, params).fetchall()
+            return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[DB Select 에러] {e}")
+        return []
+
+def update_sentiment(news_id, sentiment, reason):
+    """
+    [ sentiment.py 작업자용 ]
+    특정 뉴스의 AI 감성 분석 결과(긍정/부정/중립, 이유)를 저장합니다.
+    """
+    sql = "UPDATE clean_news SET sentiment = ?, sentiment_reason = ? WHERE news_id = ?"
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(sql, (sentiment, reason, news_id))
+            conn.commit()
+            return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[DB Update 에러] {e}")
+        return False
+
+def get_sentiment_distribution():
+    """
+    [ report.py 작업자용 ]
+    감성 분석이 완료된 뉴스의 감성별 분포(긍정/부정/중립)를 집계합니다.
+    """
+    sql = "SELECT sentiment, COUNT(*) AS cnt FROM clean_news WHERE sentiment IS NOT NULL GROUP BY sentiment"
+    try:
+        with get_db_connection() as conn:
+            rows = conn.execute(sql).fetchall()
+            return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"[DB Select 에러] {e}")
+        return []
 
 def upsert_ai_insight(insight_data):
     """
