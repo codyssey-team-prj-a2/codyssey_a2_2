@@ -40,13 +40,16 @@ def _charts_dir():
     return charts_dir
 
 
-def chart_category_distribution():
+def chart_category_distribution(date_from=None, date_to=None):
     """카테고리별 뉴스 건수 막대 차트를 생성해 PNG로 저장하고 경로를 반환합니다."""
     _setup_korean_font()
+    conditions, params = sqlite_mgr.date_range_conditions(date_from, date_to)
+    sql = "SELECT category, COUNT(*) AS cnt FROM clean_news"
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+    sql += " GROUP BY category ORDER BY cnt DESC"
     with sqlite_mgr.get_db_connection() as conn:
-        rows = conn.execute(
-            "SELECT category, COUNT(*) AS cnt FROM clean_news GROUP BY category ORDER BY cnt DESC"
-        ).fetchall()
+        rows = conn.execute(sql, params).fetchall()
 
     path = os.path.join(_charts_dir(), "category_distribution.png")
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -63,13 +66,16 @@ def chart_category_distribution():
     return path
 
 
-def chart_daily_trend():
+def chart_daily_trend(date_from=None, date_to=None):
     """일자별 뉴스 수집 추이 꺾은선 차트를 생성해 PNG로 저장하고 경로를 반환합니다."""
     _setup_korean_font()
+    conditions, params = sqlite_mgr.date_range_conditions(date_from, date_to)
+    sql = "SELECT pub_date, COUNT(*) AS cnt FROM clean_news"
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+    sql += " GROUP BY pub_date ORDER BY pub_date"
     with sqlite_mgr.get_db_connection() as conn:
-        rows = conn.execute(
-            "SELECT pub_date, COUNT(*) AS cnt FROM clean_news GROUP BY pub_date ORDER BY pub_date"
-        ).fetchall()
+        rows = conn.execute(sql, params).fetchall()
 
     path = os.path.join(_charts_dir(), "daily_trend.png")
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -87,10 +93,10 @@ def chart_daily_trend():
     return path
 
 
-def chart_sentiment_distribution():
+def chart_sentiment_distribution(date_from=None, date_to=None):
     """[보너스] 감성 분석 결과(긍정/부정/중립) 분포 원형 차트를 생성해 PNG로 저장하고 경로를 반환합니다."""
     _setup_korean_font()
-    rows = sqlite_mgr.get_sentiment_distribution()
+    rows = sqlite_mgr.get_sentiment_distribution(date_from, date_to)
 
     path = os.path.join(_charts_dir(), "sentiment_distribution.png")
     fig, ax = plt.subplots(figsize=(6, 6))
@@ -114,37 +120,55 @@ def chart_sentiment_distribution():
     return path
 
 
-def _raw_news_count():
+def _raw_news_count(date_from=None, date_to=None):
     """
-    raw 저장소(JSONL, data/raw/*.jsonl)에 적재된 전체 원본 뉴스 건수를 셉니다.
+    raw 저장소(JSONL, data/raw/*.jsonl)에 적재된 원본 뉴스 건수를 셉니다.
     정제 통과율(clean/raw) 계산의 분모로 사용됩니다.
+    date_from/date_to 지정 시 각 레코드의 collected_at(수집 시각) 날짜 부분으로 필터링합니다.
     """
     cfg = config_mgr.load_config()
     raw_dir = os.path.join(cfg.get("db_path", "./data"), "raw")
     if not os.path.isdir(raw_dir):
         return 0
 
+    import json
+
     count = 0
     for name in os.listdir(raw_dir):
         if not name.endswith(".jsonl"):
             continue
         with open(os.path.join(raw_dir, name), "r", encoding="utf-8") as f:
-            count += sum(1 for line in f if line.strip())
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                if not date_from and not date_to:
+                    count += 1
+                    continue
+                try:
+                    collected_date = json.loads(line).get("collected_at", "")[:10]
+                except (json.JSONDecodeError, AttributeError):
+                    collected_date = ""
+                if date_from and collected_date < date_from:
+                    continue
+                if date_to and collected_date > date_to:
+                    continue
+                count += 1
     return count
 
 
-def get_cleanliness_rate():
+def get_cleanliness_rate(date_from=None, date_to=None):
     """① 데이터 정제 통과율 = (clean 건수 / raw 건수) * 100"""
-    raw_count = _raw_news_count()
-    clean_count = sqlite_mgr.get_clean_news_count()
+    raw_count = _raw_news_count(date_from, date_to)
+    clean_count = sqlite_mgr.get_clean_news_count(date_from, date_to)
     rate = round((clean_count / raw_count) * 100, 2) if raw_count else None
     return {"raw_count": raw_count, "clean_count": clean_count, "rate": rate}
 
 
-def show_quality_metrics():
+def show_quality_metrics(date_from=None, date_to=None):
     """품질 지표(정제 통과율, AI 요약 성공률)를 조회하여 출력합니다."""
-    cleanliness = get_cleanliness_rate()
-    summarize = sqlite_mgr.get_summarize_success_rate()
+    cleanliness = get_cleanliness_rate(date_from, date_to)
+    summarize = sqlite_mgr.get_summarize_success_rate(date_from, date_to)
 
     print(f"\n{ui.HL}[ 품질 지표 ]{ui.FG}")
     print(f"  ① 데이터 정제 통과율 (Cleanliness Rate)")
@@ -161,10 +185,10 @@ def show_quality_metrics():
     input("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
 
 
-def show_top_n():
+def show_top_n(date_from=None, date_to=None):
     """TOP N 집계(핵심 키워드 TOP5, 카테고리별 수집량 TOP3)를 조회하여 출력합니다."""
-    keyword_top5 = sqlite_mgr.get_keyword_top_n(5)
-    category_top3 = sqlite_mgr.get_category_top_n(3)
+    keyword_top5 = sqlite_mgr.get_keyword_top_n(5, date_from, date_to)
+    category_top3 = sqlite_mgr.get_category_top_n(3, date_from, date_to)
 
     print(f"\n{ui.HL}[ TOP N 집계 ]{ui.FG}")
     print("  ① 최다 출현 핵심 키워드 TOP 5")
@@ -196,12 +220,19 @@ def build_report_content(date_from=None, date_to=None, fmt="console"):
     품질 지표 + TOP N 집계를 하나의 종합 리포트 텍스트로 구성합니다.
     fmt="md" 인 경우 마크다운 헤더/목록 문법으로, 그 외에는 콘솔/txt 겸용 평문으로 구성합니다.
     """
-    cleanliness = get_cleanliness_rate()
-    summarize = sqlite_mgr.get_summarize_success_rate()
+    cleanliness = get_cleanliness_rate(date_from, date_to)
+    summarize = sqlite_mgr.get_summarize_success_rate(date_from, date_to)
     category_top3 = sqlite_mgr.get_category_top_n(3, date_from, date_to)
-    keyword_top5 = sqlite_mgr.get_keyword_top_n(5)
+    keyword_top5 = sqlite_mgr.get_keyword_top_n(5, date_from, date_to)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    period = f"{date_from} ~ {date_to}" if date_from and date_to else "전체 기간"
+    if date_from and date_to:
+        period = f"{date_from} ~ {date_to}"
+    elif date_from:
+        period = f"{date_from} 이후"
+    elif date_to:
+        period = f"{date_to} 이전"
+    else:
+        period = "전체 기간"
 
     cleanliness_line = (
         "raw 데이터가 없어 계산할 수 없습니다."
@@ -327,9 +358,21 @@ def run_report_interactive():
                fmt)
 
 
-def _generate_and_report(chart_func, label):
+def _prompt_optional_date_range():
+    """대화형 메뉴에서 선택적으로 --date-from/--date-to를 입력받는다. 취소 시 None을 반환."""
+    date_from = ui.safe_input("▶ 집계 시작일 입력 (예: 2026-08-01, 건너뛰려면 Enter) [q:취소]: ")
+    if date_from and date_from.lower() == 'q':
+        return None
+    date_to = ui.safe_input("▶ 집계 종료일 입력 (예: 2026-08-07, 건너뛰려면 Enter) [q:취소]: ")
+    if date_to and date_to.lower() == 'q':
+        return None
+    return (date_from.strip() or None if date_from else None,
+            date_to.strip() or None if date_to else None)
+
+
+def _generate_and_report(chart_func, label, date_from=None, date_to=None):
     try:
-        path = chart_func()
+        path = chart_func(date_from, date_to)
         print(f"\n{ui.HL}>> {label}이(가) 생성되었습니다.{ui.FG}")
         print(f"   저장 경로: {path}")
     except Exception as e:
@@ -365,27 +408,41 @@ def run_menu_show():
         if choice == 'p':
             break
         elif choice == '1':
-            _generate_and_report(chart_category_distribution, "카테고리별 뉴스 건수 차트")
+            date_range = _prompt_optional_date_range()
+            if date_range is not None:
+                _generate_and_report(chart_category_distribution, "카테고리별 뉴스 건수 차트", *date_range)
         elif choice == '2':
-            _generate_and_report(chart_daily_trend, "일자별 뉴스 수집 추이 차트")
+            date_range = _prompt_optional_date_range()
+            if date_range is not None:
+                _generate_and_report(chart_daily_trend, "일자별 뉴스 수집 추이 차트", *date_range)
         elif choice == '3':
-            try:
-                paths = [chart_category_distribution(), chart_daily_trend(),
-                         chart_sentiment_distribution()]
-                print(f"\n{ui.HL}>> 차트 {len(paths)}건이 생성되었습니다.{ui.FG}")
-                for path in paths:
-                    print(f"   - {path}")
-            except Exception as e:
-                print(f"\n{ui.ERR}[오류] 차트 생성 중 문제가 발생했습니다: {e}{ui.FG}")
-            input("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
+            date_range = _prompt_optional_date_range()
+            if date_range is not None:
+                date_from, date_to = date_range
+                try:
+                    paths = [chart_category_distribution(date_from, date_to),
+                             chart_daily_trend(date_from, date_to),
+                             chart_sentiment_distribution(date_from, date_to)]
+                    print(f"\n{ui.HL}>> 차트 {len(paths)}건이 생성되었습니다.{ui.FG}")
+                    for path in paths:
+                        print(f"   - {path}")
+                except Exception as e:
+                    print(f"\n{ui.ERR}[오류] 차트 생성 중 문제가 발생했습니다: {e}{ui.FG}")
+                input("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
         elif choice == '4':
-            show_quality_metrics()
+            date_range = _prompt_optional_date_range()
+            if date_range is not None:
+                show_quality_metrics(*date_range)
         elif choice == '5':
-            show_top_n()
+            date_range = _prompt_optional_date_range()
+            if date_range is not None:
+                show_top_n(*date_range)
         elif choice == '6':
             run_report_interactive()
         elif choice == '7':
-            _generate_and_report(chart_sentiment_distribution, "감성 분포 차트")
+            date_range = _prompt_optional_date_range()
+            if date_range is not None:
+                _generate_and_report(chart_sentiment_distribution, "감성 분포 차트", *date_range)
         elif choice.startswith("report"):
             run_report_cli(choice)
         else:
