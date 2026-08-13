@@ -1,13 +1,17 @@
+# lib/system/config_mgr.py
 import json
 import os
+from pathlib import Path
 
-CONFIG_FILE = "config.json"
-ENV_FILE = ".env"
+# src/lib/system/ 기준 3단계 상위 = src/ 폴더
+SRC_DIR = Path(__file__).resolve().parents[2]
+
+CONFIG_FILE = SRC_DIR / "config.json"
+ENV_FILE = SRC_DIR / ".env"
 
 
 def load_config():
     """config.json 읽기 (빈 파일 또는 손상 시 예외 처리)"""
-    # CONFIG_FILE 변수 사용
     if not os.path.exists(CONFIG_FILE) or os.path.getsize(CONFIG_FILE) == 0:
         save_config({})
         return {}
@@ -19,15 +23,20 @@ def load_config():
         save_config({})
         return {}
 
+
 def save_config(config_data):
+    """config.json 저장"""
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-        json.dump(config_data, f, indent=4, ensure_ascii=False)
+        json.dump(config_data, f, indent=2, ensure_ascii=False)
+
 
 def set_env(key, value):
+    """ .env 파일 값 기록 """
     lines = []
     if os.path.exists(ENV_FILE):
         with open(ENV_FILE, 'r', encoding='utf-8') as f:
             lines = f.readlines()
+            
     with open(ENV_FILE, 'w', encoding='utf-8') as f:
         updated = False
         for line in lines:
@@ -39,8 +48,9 @@ def set_env(key, value):
         if not updated:
             f.write(f"{key}={value}\n")
 
+
 def get_env(key):
-    """간이 .env 읽기 함수 (현재 설정된 값 확인용)"""
+    """.env 파일 값 조회"""
     if not os.path.exists(ENV_FILE):
         return None
     with open(ENV_FILE, 'r', encoding='utf-8') as f:
@@ -49,8 +59,43 @@ def get_env(key):
                 return line.strip().split("=", 1)[1]
     return None
 
-def get_setup_progress():
-    """설정 진행 상황 반환 (완료된 갯수, 전체 갯수)"""
+
+# ====================================================
+# 실제 데이터 유효성 검증 함수 (설정 상태 실시간 판단)
+# ====================================================
+def is_ai_setup_complete():
+    """AI 설정: 플랫폼, 모델명, API Key가 모두 실제 존재해야 완료"""
+    prov = get_env("LLM_PROVIDER")
+    model = get_env("LLM_MODEL")
+    key = get_env("LLM_API_KEY")
+    return bool(prov and model and key)
+
+
+def is_news_setup_complete():
+    """뉴스 피드 설정: 등록된 뉴스 소스가 1개 이상 존재해야 완료"""
     cfg = load_config()
-    cnt = sum([cfg.get("setup_ai", False), cfg.get("setup_news", False), cfg.get("setup_log", False)])
+    sources = cfg.get("news_sources", [])
+    return len(sources) > 0
+
+
+def is_log_setup_complete():
+    """로그 설정: file 경로와 level이 모두 설정되어 있어야 완료"""
+    cfg = load_config()
+    logging_cfg = cfg.get("logging", {})
+    return bool(logging_cfg.get("file") and logging_cfg.get("level"))
+
+
+def get_setup_status():
+    """각 설정별 실제 실시간 진행 상태 반환"""
+    return {
+        "setup_ai": is_ai_setup_complete(),
+        "setup_news": is_news_setup_complete(),
+        "setup_log": is_log_setup_complete()
+    }
+
+
+def get_setup_progress():
+    """전체 설정 완료 개수와 총 개수 반환"""
+    status = get_setup_status()
+    cnt = sum([status["setup_ai"], status["setup_news"], status["setup_log"]])
     return cnt, 3

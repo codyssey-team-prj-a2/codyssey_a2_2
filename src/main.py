@@ -37,6 +37,7 @@ def run_tui():
         print("  5. AI 종합 인사이트 분석 (analyze)")
         print("  6. 품질 지표 및 시각화 차트 출력 (report)")
         print("  7. 데이터 내보내기 (export)")
+        print("=================================================")
         print("  8. 뉴스 목록 조회 (list) [보너스]")
         print("  9. 뉴스 상세 조회 (show) [보너스]")
         print(" 10. AI 감성 분석 (sentiment) [보너스]")

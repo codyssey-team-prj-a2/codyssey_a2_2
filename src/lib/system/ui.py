@@ -20,6 +20,13 @@ FG = BOLD + "\033[97m"       # 굵고 밝은 흰색
 HL = BOLD + "\033[93m"       # 굵은 강조 노란색
 ERR = BOLD + "\033[91m"      # 굵은 에러 빨간색
 
+def rl_color(code):
+    """
+    readline 모듈이 터미널 너비를 계산할 때 
+    ANSI 제어 문자를 무시하도록 \001과 \002로 감싸주는 헬퍼 함수
+    """
+    return f"\001{code}\002"
+
 def reset_terminal():
     """프로그램 종료 시 터미널 배경색, 글꼴, 색상을 완전히 원래대로 초기화합니다."""
     print(f"{RESET}\033[2J\033[H", end="", flush=True)
@@ -71,6 +78,19 @@ def draw_header(title):
     print(f"{HL}┏{border_line}┓{FG}")
     print(f"{HL}┃{FG}" + pad_text(title, width-2, "center") + f"{HL}┃{FG}")
     print(f"{HL}┗{border_line}┛{FG}")
+
+def pause(msg="\n[Enter]를 눌러 계속합니다..."):
+    """'Enter를 눌러 계속' 같은 단순 대기용 입력.
+
+    cron/작업 스케줄러처럼 표준입력이 없는 비대화형 환경에서 호출되면
+    input()이 EOFError를 던지는데, 그 경우엔 조용히 넘어간다(대화형
+    사용자에게는 기존과 동일하게 Enter를 기다리는 동작 그대로 유지).
+    """
+    try:
+        input(msg)
+    except EOFError:
+        pass
+
 
 def safe_input(prompt_text):
     """

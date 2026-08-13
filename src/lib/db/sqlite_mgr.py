@@ -400,3 +400,52 @@ def upsert_ai_insight(insight_data):
     except Exception as e:
         print(f"[DB Insight Upsert 에러] {e}")
         return False
+
+def get_by_news_id(news_id):
+    """
+    [ clean.py 작업자용 ]
+    news_id(URL) 기준으로 이미 저장된 기사가 있는지 확인합니다.
+    duplicate_policy가 'skip'일 때 중복 여부 판단에 사용합니다.
+    """
+    sql = "SELECT news_id FROM clean_news WHERE news_id = ?"
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(sql, (news_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+    except Exception as e:
+        print(f"[DB Select 에러] {e}")
+        return None
+
+def query_clean_news(date_from=None, date_to=None, category=None):
+    """
+    [ analyze.py 작업자용 ]
+    pub_date 기간 및 category로 필터링한 뉴스 목록을 가져옵니다.
+    date_from/date_to는 'YYYY-MM-DD' 형식, 셋 다 None이면 전체 대상입니다.
+    """
+    conditions = []
+    params = []
+    if date_from:
+        conditions.append("pub_date >= ?")
+        params.append(date_from)
+    if date_to:
+        conditions.append("pub_date <= ?")
+        params.append(date_to)
+    if category:
+        conditions.append("category = ?")
+        params.append(category)
+
+    sql = "SELECT news_id, source, category, title, content, ai_summary, pub_date FROM clean_news"
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+    sql += " ORDER BY pub_date DESC"
+
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(sql, params)
+            return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"[DB Select 에러] {e}")
+        return []
