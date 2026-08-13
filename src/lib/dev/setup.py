@@ -642,8 +642,8 @@ def _set_db_path(cfg):
         ui.draw_line("─")
         
         print(f"\n{ui.HL}  [ 안내 및 입력 예시 ]{ui.FG}")
-        print("  • DB 파일명(news_pipeline.db)은 고정되며, 저장할 폴더 위치만 입력합니다.")
-        print("  • 'data' 입력 시 ➔ 'src/data/news_pipeline.db' 로 자동 정규화되어 저장됩니다.\n")
+        print("  • DB 파일명(codyssey.db)은 고정되며, 저장할 폴더 위치만 입력합니다.")
+        print("  • 'data' 입력 시 ➔ 'src/data/codyssey.db' 로 자동 정규화되어 저장됩니다.\n")
         
         if has_existing:
             ui.draw_line("─")
@@ -671,7 +671,7 @@ def _set_db_path(cfg):
         if not str(p).startswith("src"):
             p = Path("src") / p
             
-        final_db_path = str(p / "news_pipeline.db")
+        final_db_path = str(p / "codyssey.db")
         storage["db_path"] = final_db_path
         config_mgr.save_config(cfg)
         
