@@ -310,7 +310,10 @@ def execute_fetch_logic(source, limit, is_cli=False):
 
     try:
         limit_int = int(limit)
+        if limit_int <= 0:
+            raise ValueError
     except (TypeError, ValueError):
+        print(f"{ui.ERR}[오류] 올바른 수집 제한 건수(양의 정수)가 아니므로 기본값 20건을 적용합니다.{ui.FG}")
         limit_int = 20
 
     timeout = config_mgr.load_config().get("fetch", {}).get("timeout_sec", DEFAULT_TIMEOUT_SEC)

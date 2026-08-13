@@ -22,6 +22,15 @@ SYSTEM_PROMPT = (
 )
 
 
+def _is_valid_date(date_str):
+    """YYYY-MM-DD 형식인지 검사한다."""
+    try:
+        datetime.strptime(date_str, "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
+
+
 def _resolve_range(date_from, date_to):
     """기간 미지정 시 최근 DEFAULT_RANGE_DAYS일로 기본값을 채운다."""
     if not date_from and not date_to:
@@ -116,18 +125,33 @@ def run_analyze(date_from=None, date_to=None, category=None):
     ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
 
 
+def _prompt_date(label):
+    """날짜 입력 프롬프트. 생략(Enter)이면 None, 취소(q)면 'q'를 반환하고,
+    그 외엔 YYYY-MM-DD 형식이 아닐 경우 오류 안내 후 재입력을 받는다."""
+    while True:
+        val = ui.safe_input(f"▶ {label} 입력 (YYYY-MM-DD, 생략하려면 그냥 Enter) [q:취소]: ")
+        if val and val.lower() == 'q':
+            return 'q'
+        if not val:
+            return None
+        if not _is_valid_date(val):
+            print(f"\n{ui.ERR}[오류] 날짜는 YYYY-MM-DD 형식으로 입력해 주세요 (예: 2026-08-13).{ui.FG}")
+            continue
+        return val
+
+
 def _do_analyze_interactive(with_ai=False):
-    date_from = ui.safe_input("▶ 시작일 입력 (YYYY-MM-DD, 생략하려면 그냥 Enter) [q:취소]: ")
-    if date_from and date_from.lower() == 'q':
+    date_from = _prompt_date("시작일")
+    if date_from == 'q':
         return
-    date_to = ui.safe_input("▶ 종료일 입력 (YYYY-MM-DD, 생략하려면 그냥 Enter) [q:취소]: ")
-    if date_to and date_to.lower() == 'q':
+    date_to = _prompt_date("종료일")
+    if date_to == 'q':
         return
     category = ui.safe_input("▶ 카테고리 입력 (생략하려면 그냥 Enter) [q:취소]: ")
     if category and category.lower() == 'q':
         return
     fn = run_analyze if with_ai else run_analyze_query
-    fn(date_from=(date_from or None), date_to=(date_to or None), category=(category or None))
+    fn(date_from=date_from, date_to=date_to, category=(category or None))
 
 
 def run_menu_show():
@@ -174,6 +198,11 @@ def run_analyze_cli(command_str):
             print(f"\n알 수 없는 옵션이 포함되어 있습니다: {unknown}")
             ui.pause("[Enter]를 눌러 돌아갑니다...")
             return
+        for label, val in (("--date-from", args.date_from), ("--date-to", args.date_to)):
+            if val and not _is_valid_date(val):
+                print(f"\n{ui.ERR}[오류] {label}는 YYYY-MM-DD 형식으로 입력해 주세요 (예: 2026-08-13).{ui.FG}")
+                ui.pause("[Enter]를 눌러 돌아갑니다...")
+                return
         run_analyze(date_from=args.date_from, date_to=args.date_to, category=args.category)
     except SystemExit:
         print("\n[오류] 옵션 파싱에 실패했습니다.")
