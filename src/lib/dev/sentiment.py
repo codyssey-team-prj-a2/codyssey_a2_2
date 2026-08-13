@@ -87,7 +87,12 @@ def run_sentiment_cli(command_str):
         if args.id and args.limit != 10:
             print("\n[안내] --id 사용 시 --limit 옵션은 동작하지 않습니다.")
 
-        run_sentiment_analysis(target, args.id, args.limit)
+        limit = args.limit
+        if limit <= 0:
+            print(f"\n{ui.ERR}[오류] 올바른 감성 분석 제한 건수(양의 정수)가 아니므로 기본값 10건을 적용합니다.{ui.FG}")
+            limit = 10
+
+        run_sentiment_analysis(target, args.id, limit)
 
     except SystemExit:
         print("\n[오류] 옵션 값이 올바르지 않습니다.")

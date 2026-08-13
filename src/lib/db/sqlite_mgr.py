@@ -93,6 +93,7 @@ def get_unsummarized_news(limit=50):
     [ summarize.py 작업자용 ]
     is_summarized 플래그가 0인(아직 요약되지 않은) 기사 목록을 가져옵니다.
     """
+    limit = max(limit, 1)  # SQLite는 음수 LIMIT을 "무제한"으로 해석하므로 방어적으로 clamp
     sql = """
         SELECT news_id, title, content 
         FROM clean_news 
@@ -133,16 +134,32 @@ def update_ai_summary(news_id, ai_summary):
 # 3. 품질 지표 및 TOP N 집계 SQL (report.py 작업자용)
 # ==========================================
 
+def date_range_conditions(date_from, date_to, column="pub_date"):
+    """
+    date_from/date_to 중 하나만 주어져도 그 방향으로 필터링되도록 독립적인
+    >=/<= 조건을 만든다(analyze.py의 query_clean_news와 동일한 방식).
+    BETWEEN을 쓰면 둘 다 있어야만 조건이 걸려서 한쪽만 지정 시 필터가 무시되는 버그가 있었다.
+    """
+    conditions = []
+    params = []
+    if date_from:
+        conditions.append(f"{column} >= ?")
+        params.append(date_from)
+    if date_to:
+        conditions.append(f"{column} <= ?")
+        params.append(date_to)
+    return conditions, params
+
+
 def get_clean_news_count(date_from=None, date_to=None):
     """
     [ report.py 작업자용 ]
     clean_news 테이블의 전체(또는 기간 내) 건수를 셉니다.
     """
+    conditions, params = date_range_conditions(date_from, date_to)
     sql = "SELECT COUNT(*) AS cnt FROM clean_news"
-    params = []
-    if date_from and date_to:
-        sql += " WHERE pub_date BETWEEN ? AND ?"
-        params = [date_from, date_to]
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
     try:
         with get_db_connection() as conn:
             row = conn.execute(sql, params).fetchone()
@@ -151,16 +168,20 @@ def get_clean_news_count(date_from=None, date_to=None):
         print(f"[DB Select 에러] {e}")
         return 0
 
-def get_summarize_success_rate():
+def get_summarize_success_rate(date_from=None, date_to=None):
     """
     [ report.py 작업자용 ]
     ② AI 요약 성공률 = (요약 성공 건수 / 요약 시도 대상 전체 건수) * 100
     is_summarized=1 인 건수를 성공 건수로, clean_news 전체 건수를 시도 대상으로 집계합니다.
+    date_from/date_to 지정 시 pub_date 기준으로 대상을 좁힙니다.
     """
+    conditions, params = date_range_conditions(date_from, date_to)
     sql = "SELECT COUNT(*) AS total, SUM(is_summarized) AS success FROM clean_news"
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
     try:
         with get_db_connection() as conn:
-            row = conn.execute(sql).fetchone()
+            row = conn.execute(sql, params).fetchone()
         total = row["total"] or 0
         success = row["success"] or 0
         rate = round((success / total) * 100, 2) if total else 0.0
@@ -174,11 +195,10 @@ def get_category_top_n(n=3, date_from=None, date_to=None):
     [ report.py 작업자용 ]
     ② 카테고리별 뉴스 수집량 TOP N (기본 3) 을 GROUP BY + LIMIT 으로 집계합니다.
     """
+    conditions, params = date_range_conditions(date_from, date_to)
     sql = "SELECT category, COUNT(*) AS cnt FROM clean_news"
-    params = []
-    if date_from and date_to:
-        sql += " WHERE pub_date BETWEEN ? AND ?"
-        params = [date_from, date_to]
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
     sql += " GROUP BY category ORDER BY cnt DESC LIMIT ?"
     params.append(n)
     try:
@@ -189,18 +209,32 @@ def get_category_top_n(n=3, date_from=None, date_to=None):
         print(f"[DB Select 에러] {e}")
         return []
 
-def get_keyword_top_n(n=5):
+def get_keyword_top_n(n=5, date_from=None, date_to=None):
     """
     [ report.py 작업자용 ]
     ① 최다 출현 핵심 키워드 TOP N (기본 5).
     ai_insight.core_keywords (콤마 구분 문자열)를 모두 모아 collections.Counter로 집계합니다.
+    date_from/date_to 지정 시, 분석 기간(period_from~period_to)이 요청 범위와
+    겹치는 ai_insight 레코드만 대상으로 합니다.
     """
     from collections import Counter
 
+    conditions = []
+    params = []
+    if date_to:
+        conditions.append("period_from <= ?")
+        params.append(date_to)
+    if date_from:
+        conditions.append("period_to >= ?")
+        params.append(date_from)
+
     sql = "SELECT core_keywords FROM ai_insight"
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+
     try:
         with get_db_connection() as conn:
-            rows = conn.execute(sql).fetchall()
+            rows = conn.execute(sql, params).fetchall()
     except Exception as e:
         print(f"[DB Select 에러] {e}")
         return []
@@ -224,22 +258,18 @@ def get_news_for_export(status="all", date_from=None, date_to=None):
     CSV/Excel/JSONL로 내보낼 clean_news 목록을 조회합니다.
 
     :param status: "all"(전체) 또는 "summarized"(is_summarized=1 인 기사만)
-    :param date_from: 조회 시작일 (YYYY-MM-DD), date_to 와 함께 지정 시 BETWEEN 필터 적용
-    :param date_to: 조회 종료일 (YYYY-MM-DD)
+    :param date_from: 조회 시작일 (YYYY-MM-DD), 단독 지정 시 이 날짜 이후 전체
+    :param date_to: 조회 종료일 (YYYY-MM-DD), 단독 지정 시 이 날짜 이전 전체
     """
     sql = """
         SELECT news_id, source, category, title, content, pub_date,
                ai_summary, is_summarized, created_at
         FROM clean_news
     """
-    conditions = []
-    params = []
+    conditions, params = date_range_conditions(date_from, date_to)
 
     if status == "summarized":
         conditions.append("is_summarized = 1")
-    if date_from and date_to:
-        conditions.append("pub_date BETWEEN ? AND ?")
-        params += [date_from, date_to]
 
     if conditions:
         sql += " WHERE " + " AND ".join(conditions)
@@ -325,6 +355,7 @@ def get_news_for_sentiment(target="unanalyzed", news_id=None, limit=10):
 
     :param target: "unanalyzed"(sentiment IS NULL 인 기사만, 기본), "all"(전체), "id"(단건)
     """
+    limit = max(limit, 1)  # SQLite는 음수 LIMIT을 "무제한"으로 해석하므로 방어적으로 clamp
     if target == "id":
         if not news_id:
             return []
@@ -361,15 +392,19 @@ def update_sentiment(news_id, sentiment, reason):
         print(f"[DB Update 에러] {e}")
         return False
 
-def get_sentiment_distribution():
+def get_sentiment_distribution(date_from=None, date_to=None):
     """
     [ report.py 작업자용 ]
     감성 분석이 완료된 뉴스의 감성별 분포(긍정/부정/중립)를 집계합니다.
+    date_from/date_to 지정 시 pub_date 기준으로 대상을 좁힙니다.
     """
-    sql = "SELECT sentiment, COUNT(*) AS cnt FROM clean_news WHERE sentiment IS NOT NULL GROUP BY sentiment"
+    conditions, params = date_range_conditions(date_from, date_to)
+    conditions.insert(0, "sentiment IS NOT NULL")
+    sql = "SELECT sentiment, COUNT(*) AS cnt FROM clean_news WHERE " + " AND ".join(conditions)
+    sql += " GROUP BY sentiment"
     try:
         with get_db_connection() as conn:
-            rows = conn.execute(sql).fetchall()
+            rows = conn.execute(sql, params).fetchall()
             return [dict(row) for row in rows]
     except Exception as e:
         print(f"[DB Select 에러] {e}")
