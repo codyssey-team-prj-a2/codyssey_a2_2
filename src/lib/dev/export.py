@@ -70,7 +70,7 @@ def run_export(fmt, status="all", date_from=None, date_to=None):
 
     if not rows:
         print(f"\n{ui.ERR}[안내] 조건에 맞는 데이터가 없어 내보낼 항목이 없습니다.{ui.FG}")
-        input("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
+        ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
         return
 
     filename = _export_filename(fmt)
@@ -83,7 +83,7 @@ def run_export(fmt, status="all", date_from=None, date_to=None):
     except Exception as e:
         print(f"\n{ui.ERR}[오류] 내보내기 중 문제가 발생했습니다: {e}{ui.FG}")
 
-    input("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
+    ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
 
 
 def run_export_cli(command_str):
@@ -94,7 +94,7 @@ def run_export_cli(command_str):
 
         if unknown:
             print(f"\n알 수 없는 옵션이 포함되어 있습니다: {unknown}")
-            input("[Enter]를 눌러 돌아갑니다...")
+            ui.pause("[Enter]를 눌러 돌아갑니다...")
             return
 
         run_export(args.format, args.status, args.date_from, args.date_to)
@@ -102,10 +102,10 @@ def run_export_cli(command_str):
     except SystemExit:
         print("\n[오류] 필수 파라미터가 누락되었거나 값이 올바르지 않습니다. "
               "'--format'은 csv/jsonl/excel 중 하나로 반드시 지정하세요.")
-        input("[Enter]를 눌러 돌아갑니다...")
+        ui.pause("[Enter]를 눌러 돌아갑니다...")
     except Exception as e:
         print(f"\n[오류] 명령어 파싱 중 에러 발생: {e}")
-        input("[Enter]를 눌러 돌아갑니다...")
+        ui.pause("[Enter]를 눌러 돌아갑니다...")
 
 
 def run_export_interactive():
@@ -118,7 +118,7 @@ def run_export_interactive():
     fmt = fmt.strip().lower()
     if fmt not in ("csv", "jsonl", "excel"):
         print(f"\n{ui.ERR}[오류] 지원하지 않는 포맷입니다: {fmt}{ui.FG}")
-        input("[Enter]를 눌러 돌아갑니다...")
+        ui.pause("[Enter]를 눌러 돌아갑니다...")
         return
 
     print("\n  [옵션 추천] '--status' 파라미터 (미입력 시 기본값 all 적용)")
@@ -128,7 +128,7 @@ def run_export_interactive():
     status = status.strip().lower() if status and status.strip() else "all"
     if status not in ("summarized", "all"):
         print(f"\n{ui.ERR}[오류] 지원하지 않는 상태 필터입니다: {status}{ui.FG}")
-        input("[Enter]를 눌러 돌아갑니다...")
+        ui.pause("[Enter]를 눌러 돌아갑니다...")
         return
 
     date_from = ui.safe_input("▶ 조회 시작일 입력 (예: 2026-08-01, 건너뛰려면 Enter) [q:취소]: ")
@@ -149,7 +149,7 @@ def show_export_status():
     print(f"\n{ui.HL}[ 현재 내보내기 대상 데이터 상태 ]{ui.FG}")
     print(f"  - clean_news 전체: {total}건")
     print(f"  - 요약 완료(summarized): {summarize['success_count']}건")
-    input("\n[Enter]를 눌러 서브메뉴로 돌아갑니다...")
+    ui.pause("\n[Enter]를 눌러 서브메뉴로 돌아갑니다...")
 
 
 def run_menu_show():
@@ -185,4 +185,4 @@ def run_menu_show():
             run_export_cli(user_input)
         else:
             print("\n올바르지 않은 명령어나 번호입니다.")
-            input("다시 시도하려면 [Enter]를 누르세요...")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")

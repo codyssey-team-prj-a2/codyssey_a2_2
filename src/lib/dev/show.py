@@ -46,7 +46,7 @@ def run_show(news_id):
         print(f"\n{ui.ERR}[안내] news_id '{news_id}'에 해당하는 기사를 찾을 수 없습니다.{ui.FG}")
     else:
         print_news_detail(news)
-    input("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
+    ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
 
 
 def run_show_cli(command_str):
@@ -57,17 +57,17 @@ def run_show_cli(command_str):
 
         if unknown:
             print(f"\n알 수 없는 옵션이 포함되어 있습니다: {unknown}")
-            input("[Enter]를 눌러 돌아갑니다...")
+            ui.pause("[Enter]를 눌러 돌아갑니다...")
             return
 
         run_show(args.id)
 
     except SystemExit:
         print("\n[오류] 필수 파라미터가 누락되었습니다. '--id'를 반드시 포함하세요.")
-        input("[Enter]를 눌러 돌아갑니다...")
+        ui.pause("[Enter]를 눌러 돌아갑니다...")
     except Exception as e:
         print(f"\n[오류] 명령어 파싱 중 에러 발생: {e}")
-        input("[Enter]를 눌러 돌아갑니다...")
+        ui.pause("[Enter]를 눌러 돌아갑니다...")
 
 
 def run_show_interactive():
@@ -111,4 +111,4 @@ def run_menu_show():
             run_show_cli(user_input)
         else:
             print("\n올바르지 않은 명령어나 번호입니다.")
-            input("다시 시도하려면 [Enter]를 누르세요...")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")
