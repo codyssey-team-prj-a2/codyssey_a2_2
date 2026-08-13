@@ -13,10 +13,9 @@ from lib.system import config_mgr
 # ==========================================
 def get_db_connection():
     cfg = config_mgr.load_config()
-    db_dir = cfg.get("db_path", "./data")
-    os.makedirs(db_dir, exist_ok=True)
-    db_path = os.path.join(db_dir, "codyssey.db")
-    
+    db_path = cfg.get("storage", {}).get("db_path") or os.path.join("./data", "codyssey.db")
+    os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
+
     # 딕셔너리 형태로 결과를 반환하도록 Row 팩토리 설정 (사용하기 편함)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
