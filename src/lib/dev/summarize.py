@@ -127,7 +127,11 @@ def run_summarize_cli(command_str):
             ui.pause("[Enter]를 눌러 돌아갑니다...")
             return
         if args.unsummarized:
-            run_summarize_unsummarized(limit=args.limit)
+            limit = args.limit
+            if limit <= 0:
+                print(f"\n{ui.ERR}[오류] 올바른 요약 제한 건수(양의 정수)가 아니므로 기본값 10건을 적용합니다.{ui.FG}")
+                limit = 10
+            run_summarize_unsummarized(limit=limit)
         else:
             print("\n[안내] --unsummarized 플래그를 포함해서 실행하세요.")
             ui.pause("[Enter]를 눌러 돌아갑니다...")
