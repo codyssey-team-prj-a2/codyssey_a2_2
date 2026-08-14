@@ -22,5 +22,3 @@ services:
       - ../src:/app/src
       - ../data:/app/data
       - ../logs:/app/logs
-      - ../src/.env:/app/src/.env
-      - ../src/config.json:/app/src/config.json

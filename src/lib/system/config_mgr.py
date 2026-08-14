@@ -1,6 +1,7 @@
-# lib/system/config_mgr.py
+# src/lib/system/config_mgr.py
 import json
 import os
+import shutil
 from pathlib import Path
 
 # src/lib/system/ 기준 3단계 상위 = src/ 폴더
@@ -25,15 +26,38 @@ def load_config():
 
 
 def save_config(config_data):
-    """config.json 저장"""
+    """config.json 저장 (레거시 플래그 자동 정리)"""
+    # 과거 잔재 플래그가 남아있다면 제거 후 저장
+    clean_data = config_data.copy()
+    for legacy_key in ["setup_ai", "setup_news", "setup_log", "setup_step", "db_path", "log_path", "log_level"]:
+        clean_data.pop(legacy_key, None)
+        
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-        json.dump(config_data, f, indent=2, ensure_ascii=False)
+        json.dump(clean_data, f, indent=2, ensure_ascii=False)
+
+
+def get_env(key):
+    """.env 파일 값 조회 (디렉토리 생성 버그 방어 및 양끝 따옴표 제거)"""
+    if not os.path.isfile(ENV_FILE):
+        return None
+    try:
+        with open(ENV_FILE, 'r', encoding='utf-8') as f:
+            for line in f:
+                if line.startswith(f"{key}="):
+                    val = line.strip().split("=", 1)[1]
+                    return val.strip().strip("'\"")
+    except Exception:
+        return None
+    return None
 
 
 def set_env(key, value):
     """ .env 파일 값 기록 """
+    if os.path.isdir(ENV_FILE):
+        shutil.rmtree(ENV_FILE)
+        
     lines = []
-    if os.path.exists(ENV_FILE):
+    if os.path.isfile(ENV_FILE):
         with open(ENV_FILE, 'r', encoding='utf-8') as f:
             lines = f.readlines()
             
@@ -47,18 +71,6 @@ def set_env(key, value):
                 f.write(line)
         if not updated:
             f.write(f"{key}={value}\n")
-
-
-def get_env(key):
-    """.env 파일 값 조회"""
-    if not os.path.exists(ENV_FILE):
-        return None
-    with open(ENV_FILE, 'r', encoding='utf-8') as f:
-        for line in f:
-            if line.startswith(f"{key}="):
-                val = line.strip().split("=", 1)[1]
-                return val.strip().strip("'\"")
-    return None
 
 
 # ====================================================
@@ -104,7 +116,7 @@ def get_setup_status():
 
 
 def get_setup_progress():
-    """전체 설정 완료 개수와 총 개수 반환"""
+    """전체 설정 완료 개수와 총 개수(4) 반환"""
     status = get_setup_status()
     cnt = sum([
         status["setup_ai"],

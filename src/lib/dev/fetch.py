@@ -168,15 +168,18 @@ def run_menu_show():
         # [3] 대화형 메뉴 (1번 수정사항: 메뉴 번호 직관성 확보)
         print(f"{ui.HL}  [ 대화형 메뉴 ]{ui.FG}")
         print("  1. 뉴스 수집 실행 (등록 소스 목록 선택)")
-        print("  2. 현재 수집된 데이터 수 확인")
-        print("  P. 상위 메뉴로 이동\n")
+        print("  2. 현재 수집된 데이터 수 확인\n")
         
         # [1번 수정사항] CLI 직접 입력 가이드는 메뉴 하단 보조 안내문으로 이동
-        print(f"{ui.FG}  ※ CLI 직접 입력 예시: fetch --source [소스명|all] [--limit 20]")
-        ui.draw_line("─")
+        print(f"{ui.HL}  [ CLI 직접 입력 예시 ]{ui.FG}")
+        print(f"  fetch --source [소스명|all] [--limit 20]\n")
+
         
+        print(f"\n  {ui.FG}💡 번호 선택 또는 CLI 명령어 직접 입력  |  {ui.HL}[P]{ui.FG} 상위 메뉴")
+        ui.draw_line("─")
+
         # [4] 명령어 입력 프롬프트 (3번/4번 수정사항 반영)
-        user_input = input(f"\n{ui.HL}입력 (메뉴번호 / CLI ) > {ui.FG}").strip()
+        user_input = input(f"{ui.HL} Codyssey/fetch > {ui.FG}").strip()
         
         if not user_input:
             continue
