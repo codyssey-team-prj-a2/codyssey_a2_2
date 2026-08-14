@@ -182,7 +182,7 @@ def show_quality_metrics(date_from=None, date_to=None):
     print(f"     시도 대상 {summarize['total_target']}건 중 성공 {summarize['success_count']}건 "
           f"= {summarize['rate']}%")
 
-    input("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
+    ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
 
 
 def show_top_n(date_from=None, date_to=None):
@@ -205,7 +205,7 @@ def show_top_n(date_from=None, date_to=None):
     else:
         print("     집계할 clean_news 데이터가 없습니다.")
 
-    input("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
+    ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
 
 
 def _reports_dir():
@@ -309,7 +309,7 @@ def run_report(date_from=None, date_to=None, fmt="console"):
         print(f"\n{ui.HL}>> {fmt.upper()} 리포트 파일이 저장되었습니다.{ui.FG}")
         print(f"   저장 경로: {path}")
 
-    input("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
+    ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
 
 
 def run_report_cli(command_str):
@@ -320,17 +320,17 @@ def run_report_cli(command_str):
 
         if unknown:
             print(f"\n알 수 없는 옵션이 포함되어 있습니다: {unknown}")
-            input("[Enter]를 눌러 돌아갑니다...")
+            ui.pause("[Enter]를 눌러 돌아갑니다...")
             return
 
         run_report(args.date_from, args.date_to, args.format)
 
     except SystemExit:
         print("\n[오류] '--format' 옵션은 console, txt, md 중 하나여야 합니다.")
-        input("[Enter]를 눌러 돌아갑니다...")
+        ui.pause("[Enter]를 눌러 돌아갑니다...")
     except Exception as e:
         print(f"\n[오류] 명령어 파싱 중 에러 발생: {e}")
-        input("[Enter]를 눌러 돌아갑니다...")
+        ui.pause("[Enter]를 눌러 돌아갑니다...")
 
 
 def run_report_interactive():
@@ -343,7 +343,7 @@ def run_report_interactive():
     fmt = fmt.strip().lower() if fmt and fmt.strip() else "console"
     if fmt not in ("console", "txt", "md"):
         print(f"\n{ui.ERR}[오류] 지원하지 않는 형식입니다: {fmt}{ui.FG}")
-        input("[Enter]를 눌러 돌아갑니다...")
+        ui.pause("[Enter]를 눌러 돌아갑니다...")
         return
 
     date_from = ui.safe_input("▶ 집계 시작일 입력 (예: 2026-08-01, 건너뛰려면 Enter) [q:취소]: ")
@@ -377,7 +377,7 @@ def _generate_and_report(chart_func, label, date_from=None, date_to=None):
         print(f"   저장 경로: {path}")
     except Exception as e:
         print(f"\n{ui.ERR}[오류] 차트 생성 중 문제가 발생했습니다: {e}{ui.FG}")
-    input("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
+    ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
 
 
 def run_menu_show():
@@ -428,7 +428,7 @@ def run_menu_show():
                         print(f"   - {path}")
                 except Exception as e:
                     print(f"\n{ui.ERR}[오류] 차트 생성 중 문제가 발생했습니다: {e}{ui.FG}")
-                input("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
+                ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
         elif choice == '4':
             date_range = _prompt_optional_date_range()
             if date_range is not None:
@@ -447,4 +447,4 @@ def run_menu_show():
             run_report_cli(choice)
         else:
             print("\n올바르지 않은 명령어나 번호입니다.")
-            input("다시 시도하려면 [Enter]를 누르세요...")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")

@@ -35,7 +35,7 @@ def print_news_list(result):
 def run_list(page=1, size=10, category=None):
     result = sqlite_mgr.get_news_list(page, size, category)
     print_news_list(result)
-    input("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
+    ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
 
 
 def run_list_cli(command_str):
@@ -46,17 +46,17 @@ def run_list_cli(command_str):
 
         if unknown:
             print(f"\n알 수 없는 옵션이 포함되어 있습니다: {unknown}")
-            input("[Enter]를 눌러 돌아갑니다...")
+            ui.pause("[Enter]를 눌러 돌아갑니다...")
             return
 
         run_list(args.page, args.size, args.category)
 
     except SystemExit:
         print("\n[오류] '--page', '--size' 옵션에는 숫자를 입력하세요.")
-        input("[Enter]를 눌러 돌아갑니다...")
+        ui.pause("[Enter]를 눌러 돌아갑니다...")
     except Exception as e:
         print(f"\n[오류] 명령어 파싱 중 에러 발생: {e}")
-        input("[Enter]를 눌러 돌아갑니다...")
+        ui.pause("[Enter]를 눌러 돌아갑니다...")
 
 
 def run_list_interactive():
@@ -78,7 +78,7 @@ def run_list_interactive():
         size = int(size_input.strip()) if size_input and size_input.strip() else 10
     except ValueError:
         print(f"\n{ui.ERR}[오류] 페이지/건수는 숫자로 입력해야 합니다.{ui.FG}")
-        input("[Enter]를 눌러 돌아갑니다...")
+        ui.pause("[Enter]를 눌러 돌아갑니다...")
         return
 
     run_list(page, size, category.strip() if category and category.strip() else None)
@@ -114,4 +114,4 @@ def run_menu_show():
             run_list_cli(user_input)
         else:
             print("\n올바르지 않은 명령어나 번호입니다.")
-            input("다시 시도하려면 [Enter]를 누르세요...")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")

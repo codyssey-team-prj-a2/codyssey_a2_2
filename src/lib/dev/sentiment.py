@@ -40,13 +40,13 @@ def run_sentiment_analysis(target="unanalyzed", news_id=None, limit=10):
     if not ai_client.has_api_key():
         print(f"\n{ui.ERR}[오류] AI API 키가 설정되지 않았습니다. "
               f"환경 설정(메인 메뉴 1번)에서 먼저 등록하세요.{ui.FG}")
-        input("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
+        ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
         return
 
     rows = sqlite_mgr.get_news_for_sentiment(target, news_id, limit)
     if not rows:
         print(f"\n{ui.ERR}[안내] 감성 분석할 대상이 없습니다.{ui.FG}")
-        input("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
+        ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
         return
 
     print(f"\n{ui.HL}>> 감성 분석 대상: {len(rows)}건{ui.FG}")
@@ -63,7 +63,7 @@ def run_sentiment_analysis(target="unanalyzed", news_id=None, limit=10):
             failed += 1
 
     print(f"\n{ui.HL}>> 감성 분석 완료: 성공 {success}건, 실패 {failed}건{ui.FG}")
-    input("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
+    ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
 
 
 def run_sentiment_cli(command_str):
@@ -74,7 +74,7 @@ def run_sentiment_cli(command_str):
 
         if unknown:
             print(f"\n알 수 없는 옵션이 포함되어 있습니다: {unknown}")
-            input("[Enter]를 눌러 돌아갑니다...")
+            ui.pause("[Enter]를 눌러 돌아갑니다...")
             return
 
         if args.id:
@@ -96,10 +96,10 @@ def run_sentiment_cli(command_str):
 
     except SystemExit:
         print("\n[오류] 옵션 값이 올바르지 않습니다.")
-        input("[Enter]를 눌러 돌아갑니다...")
+        ui.pause("[Enter]를 눌러 돌아갑니다...")
     except Exception as e:
         print(f"\n[오류] 명령어 파싱 중 에러 발생: {e}")
-        input("[Enter]를 눌러 돌아갑니다...")
+        ui.pause("[Enter]를 눌러 돌아갑니다...")
 
 
 def run_menu_show():
@@ -135,4 +135,4 @@ def run_menu_show():
             run_sentiment_cli(user_input)
         else:
             print("\n올바르지 않은 명령어나 번호입니다.")
-            input("다시 시도하려면 [Enter]를 누르세요...")
+            ui.pause("다시 시도하려면 [Enter]를 누르세요...")
