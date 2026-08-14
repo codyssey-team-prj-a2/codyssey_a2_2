@@ -7,16 +7,15 @@ from lib.dev import setup, fetch, clean, summarize, analyze, report, export, lis
 
 # [라우터 맵] 선택 번호와 해당 모듈의 실행 함수 매핑
 MODULE_MAP = {
-    '1': setup.run_menu_show,
-    '2': fetch.run_menu_show,
-    '3': clean.run_menu_show,
-    '4': summarize.run_menu_show,
-    '5': analyze.run_menu_show,
-    '6': report.run_menu_show,
-    '7': export.run_menu_show,
-    '8': list_news.run_menu_show,
-    '9': show.run_menu_show,
-    '10': sentiment.run_menu_show,
+    '0': setup.run_menu_show,
+    '1': fetch.run_menu_show,
+    '2': clean.run_menu_show,
+    '3': summarize.run_menu_show,
+    '4': analyze.run_menu_show,
+    '5': report.run_menu_show,
+    '6': export.run_menu_show,
+    '7': list_news.run_menu_show,
+    '8': sentiment.run_menu_show,
 }
 
 def run_tui():
@@ -44,22 +43,21 @@ def run_tui():
         status_tag = f"({cnt}/{total} 완료 - {detail_str})" if setup_ok else f"({cnt}/{total} 진행중 - {detail_str})"
         
         # 3. 1번 메뉴 항목 출력 및 구분선
-        print(f"  1. 환경 설정 {status_tag}")
+        print(f"  0. 환경 설정 {status_tag}")
         ui.draw_line("─")
         
         # 4. 2~7번 핵심 파이프라인 메뉴
-        print("  2. 뉴스 수집 (fetch)")
-        print("  3. 데이터 정제 (clean)")
-        print("  4. AI 3줄 요약 (summarize)")
-        print("  5. AI 종합 인사이트 분석 (analyze)")
-        print("  6. 품질 지표 및 시각화 차트 출력 (report)")
-        print("  7. 데이터 내보내기 (export)")
+        print("  1. 뉴스 수집 (fetch)")
+        print("  2. 데이터 정제 (clean)")
+        print("  3. AI 3줄 요약 (summarize)")
+        print("  4. AI 종합 인사이트 분석 (analyze)")
+        print("  5. 품질 지표 및 시각화 차트 출력 (report)")
+        print("  6. 데이터 내보내기 (export)")
         ui.draw_line("─")
         
-        # 5. 8~10번 보너스 기능 메뉴
-        print("  8. 뉴스 목록 조회 (list) [보너스]")
-        print("  9. 뉴스 상세 조회 (show) [보너스]")
-        print(" 10. AI 감성 분석 (sentiment) [보너스]")
+        # 5. 7~9번 보너스 기능 메뉴
+        print("  7. 뉴스 목록 조회 (list)")
+        print("  8. AI 감성 분석 (sentiment)")
         print("\n  Q. 시스템 종료\n")
         
         ui.draw_line("─")
@@ -70,7 +68,7 @@ def run_tui():
             
         elif choice in MODULE_MAP:
             # 1번(환경설정) 외 기능은 4/4 설정 완료 시에만 허용
-            if choice != '1' and not setup_ok:
+            if choice != '0' and not setup_ok:
                 input(f"\n[차단] 환경설정을 {total}/{total}까지 모두 완료해야 합니다. [Enter]")
                 continue
             
