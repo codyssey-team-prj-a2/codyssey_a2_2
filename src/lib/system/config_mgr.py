@@ -29,11 +29,31 @@ def save_config(config_data):
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
         json.dump(config_data, f, indent=2, ensure_ascii=False)
 
+# src/lib/system/config_mgr.py 내 get_env 및 set_env 수정
+
+def get_env(key):
+    """.env 파일 값 조회 (디렉토리인 경우 또는 미존재 시 None 처리)"""
+    if not os.path.isfile(ENV_FILE):  # 👈 isfile로 검사하여 디렉토리 에러 방어
+        return None
+    try:
+        with open(ENV_FILE, 'r', encoding='utf-8') as f:
+            for line in f:
+                if line.startswith(f"{key}="):
+                    val = line.strip().split("=", 1)[1]
+                    return val.strip().strip("'\"")
+    except Exception:
+        return None
+    return None
 
 def set_env(key, value):
     """ .env 파일 값 기록 """
+    # 혹시 .env가 디렉토리로 생성되어 있다면 강제 삭제 후 파일로 재생성
+    if os.path.isdir(ENV_FILE):
+        import shutil
+        shutil.rmtree(ENV_FILE)
+        
     lines = []
-    if os.path.exists(ENV_FILE):
+    if os.path.isfile(ENV_FILE):
         with open(ENV_FILE, 'r', encoding='utf-8') as f:
             lines = f.readlines()
             
@@ -47,19 +67,6 @@ def set_env(key, value):
                 f.write(line)
         if not updated:
             f.write(f"{key}={value}\n")
-
-
-def get_env(key):
-    """.env 파일 값 조회"""
-    if not os.path.exists(ENV_FILE):
-        return None
-    with open(ENV_FILE, 'r', encoding='utf-8') as f:
-        for line in f:
-            if line.startswith(f"{key}="):
-                val = line.strip().split("=", 1)[1]
-                return val.strip().strip("'\"")
-    return None
-
 
 # ====================================================
 # 실제 데이터 유효성 검증 함수 (설정 상태 실시간 판단)
