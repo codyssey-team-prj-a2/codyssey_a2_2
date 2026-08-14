@@ -56,7 +56,8 @@ def get_env(key):
     with open(ENV_FILE, 'r', encoding='utf-8') as f:
         for line in f:
             if line.startswith(f"{key}="):
-                return line.strip().split("=", 1)[1]
+                val = line.strip().split("=", 1)[1]
+                return val.strip().strip("'\"")
     return None
 
 
