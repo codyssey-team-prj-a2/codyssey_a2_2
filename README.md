@@ -205,6 +205,8 @@ OPENAI_BASE_URL=https://your-custom-gateway-url/v1
 3. **칸반 보드 (Kanban View)**[cite: 1]:
    - `해야할 일` ➔ `작업중` ➔ `작업완료` ➔ `검토중` ➔ `최종완료` 상태 흐름을 시각화하여 병목(Blocker) 구간을 즉시 파악하고, 데일리 스크럼 진행 및 피드백 안건으로 활용[cite: 1].
 
+   [**프로젝트 진행 설계 상세**](./documentation/draft/프로젝트진행_설계_전략.md)
+
 ### 5.3 Git 브랜치 운영 전략
 
 ```text
