@@ -107,10 +107,11 @@ def run_board(page=1, size=10, category=None, date=None, keyword=None):
 
         items = print_news_board(result, curr_page, curr_size, curr_cat, curr_date, curr_kw)
         
-        print(f" {ui.HL}[명령어]{ui.FG} N: 다음 | P: 이전 | F: 검색 | S: 건수 변경 | Q: 메뉴로")
-        print(f" {ui.HL}[조회]{ui.FG}   번호 (또는 show --no 번호) 입력 시 상세조회 (예: 10)")
+        print(f" {ui.HL}[명령어]{ui.FG} N: 다음 | P: 이전 | F: 검색 | S: 건수 변경 | No: 상세조회 | Q: 메뉴로")
+        print(f" {ui.HL}[CLI]{ui.FG}   show --no 번호 : 상세조회 (show --no 10)")
         
-        cmd_raw = input(f"{ui.rl_color(ui.HL)}입력 > {ui.rl_color(ui.FG)}").strip()
+        ui.draw_line("─")
+        cmd_raw = input(f"{ui.rl_color(ui.HL)} Codyssey/list | show > {ui.rl_color(ui.FG)}").strip()
         cmd = cmd_raw.lower()
         
         if cmd == 'q':
@@ -206,6 +207,7 @@ def run_menu_show():
 
         print(f"{ui.HL}  [ 대화형 메뉴 ]{ui.FG}")
         print("  1. 목록 조회 (게시판 모드 열기)")
+        print("  P. 상위 메뉴로 돌아가기")
         print("\n")
 
         print(f"{ui.HL}  [ CLI 직접 입력 예시 ]{ui.FG}")
@@ -213,7 +215,7 @@ def run_menu_show():
         print("  (입력 예: list -p 1 -s 10 -c IT --keyword 애플)")
 
         ui.draw_line("─")
-        user_input = input(f"{ui.rl_color(ui.HL)}입력 (메뉴번호 / CLI명령어 / P: 상위 메뉴로) > {ui.rl_color(ui.FG)}").strip()
+        user_input = input(f"{ui.rl_color(ui.HL)} Codyssey/list > {ui.rl_color(ui.FG)}").strip()
 
         if not user_input:
             continue
