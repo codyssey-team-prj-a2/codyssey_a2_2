@@ -65,7 +65,7 @@ def get_env(key):
 # 실제 데이터 유효성 검증 함수 (설정 상태 실시간 판단)
 # ====================================================
 def is_ai_setup_complete():
-    """AI 설정: 플랫폼, 모델명, API Key가 모두 실제 존재해야 완료"""
+    """1. AI 설정: 플랫폼, 모델명, API Key가 모두 실제 존재해야 완료"""
     prov = get_env("LLM_PROVIDER")
     model = get_env("LLM_MODEL")
     key = get_env("LLM_API_KEY")
@@ -73,14 +73,21 @@ def is_ai_setup_complete():
 
 
 def is_news_setup_complete():
-    """뉴스 피드 설정: 등록된 뉴스 소스가 1개 이상 존재해야 완료"""
+    """2. 뉴스 피드 설정: 등록된 뉴스 소스가 1개 이상 존재해야 완료"""
     cfg = load_config()
     sources = cfg.get("news_sources", [])
     return len(sources) > 0
 
 
+def is_db_setup_complete():
+    """3. DB 경로 설정: storage.db_path 설정이 지정되어 있어야 완료"""
+    cfg = load_config()
+    db_path = cfg.get("storage", {}).get("db_path")
+    return bool(db_path)
+
+
 def is_log_setup_complete():
-    """로그 설정: file 경로와 level이 모두 설정되어 있어야 완료"""
+    """4. 로그 설정: file 경로와 level이 모두 설정되어 있어야 완료"""
     cfg = load_config()
     logging_cfg = cfg.get("logging", {})
     return bool(logging_cfg.get("file") and logging_cfg.get("level"))
@@ -91,6 +98,7 @@ def get_setup_status():
     return {
         "setup_ai": is_ai_setup_complete(),
         "setup_news": is_news_setup_complete(),
+        "setup_db": is_db_setup_complete(),
         "setup_log": is_log_setup_complete()
     }
 
@@ -98,5 +106,10 @@ def get_setup_status():
 def get_setup_progress():
     """전체 설정 완료 개수와 총 개수 반환"""
     status = get_setup_status()
-    cnt = sum([status["setup_ai"], status["setup_news"], status["setup_log"]])
-    return cnt, 3
+    cnt = sum([
+        status["setup_ai"],
+        status["setup_news"],
+        status["setup_db"],
+        status["setup_log"]
+    ])
+    return cnt, 4
