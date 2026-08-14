@@ -28,3 +28,5 @@ logs/
 *.jsonl
 .DS_Store
 .keep
+src/exports/
+src/reports/

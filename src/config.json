@@ -25,18 +25,5 @@
       "category": "종합",
       "enabled": true
     }
-  ],
-  "db_path": "./data",
-  "log_path": "./logs",
-  "log_level": "DEBUG",
-  "setup_log": true,
-  "setup_ai": true,
-  "setup_news": true,
-  "storage": {
-    "db_path": "./data/codyssey.db"
-  },
-  "logging": {
-    "file": "./logs/app.log",
-    "level": "INFO"
-  }
+  ]
 }
