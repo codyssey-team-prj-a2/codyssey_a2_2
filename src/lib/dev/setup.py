@@ -69,7 +69,11 @@ def run_menu_show():
         print(f"  4. 로그 폴더 경로/수준 설정     [{log_st}]\n")
         
         ui.draw_line("─")
-        prompt_str = f"{ui.rl_color(ui.HL)}입력 (메뉴번호 / P: 상위 메뉴로) > {ui.rl_color(ui.FG)}"
+
+        print(f"\n  {ui.FG}💡 번호 선택  |  {ui.HL}[P]{ui.FG} 상위 메뉴로")
+
+        ui.draw_line("─")
+        prompt_str = f"{ui.rl_color(ui.HL)} Codyssey/setup > {ui.rl_color(ui.FG)}"
         choice = input(prompt_str).strip().lower()
         
         if choice == 'p': 
