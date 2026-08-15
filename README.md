@@ -37,11 +37,8 @@
 # 1. docker 디렉토리로 이동
 cd docker
 
-# 2. Docker 이미지 빌드 및 실행 스크립트 권한 부여
+# 2. Docker 이미지 빌드 및 실행 스크립트 권한 부여 후 실행
 chmod +x run.sh
-./run.sh build
-
-# 3. Docker 대화형 터미널 접속
 ./run.sh
 
 # 4. 컨테이너 내부(app/src)에서 메인 애플리케이션 실행
@@ -49,20 +46,6 @@ python3 main.py
 ```
 
 - `docker-compose.yml`을 통해 호스트의 `src/`, `data/`, `logs/`, `script/` 폴더가 컨테이너 내부로 실시간 마운트된다[cite: 1].
-
-### 2.3 로컬 Python 직접 실행 방법
-
-```bash
-# 1. 소스코드 디렉토리로 이동
-cd src/
-
-# 2. 필수 의존성 패키지 설치
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-
-# 3. 메인 프로그램 실행
-python3 main.py
-```
 
 ---
 
@@ -84,13 +67,16 @@ python3 main.py
   4. AI 종합 인사이트 분석 (analyze)
 ───────────────────────────────────────────────────
   5. 뉴스 목록 조회 (list)
-  6. AI 감성 분석 (sentiment)
-  7. 품질 지표 및 시각화 차트 출력 (report)
+  6. 품질 지표 및 시각화 차트 출력 (report)
+  7. AI 감성 분석 (sentiment)
+───────────────────────────────────────────────────
   8. 데이터 내보내기 (export)
 
   Q. 시스템 종료
 ───────────────────────────────────────────────────
 ```
+
+- 실행 화면 예시 [실행화면 링크](./documentation/result/7.ui-example.md)
 
 ### 3.2 CLI 서브커맨드 직접 실행 명령어 예시
 

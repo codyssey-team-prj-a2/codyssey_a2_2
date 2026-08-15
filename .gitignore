@@ -4,6 +4,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+.build_hash
 
 # ========================
 # 가상 환경 (Virtual Environment)
