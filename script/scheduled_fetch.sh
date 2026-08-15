@@ -11,4 +11,4 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] 정기 뉴스 수집 스케줄러 작동 �
 cd /app/src
 
 # 비대화형(automation.py) 파일로 수집 명령 실행
-python3 automation.py fetch --source all --limit 20
+/usr/local/bin/python3 automation.py fetch --source all --limit 20
