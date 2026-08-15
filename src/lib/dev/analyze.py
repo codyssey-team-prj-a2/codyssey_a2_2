@@ -146,7 +146,7 @@ def _prompt_date(label):
     """날짜 입력 프롬프트. 생략(Enter)이면 None, 취소(q)면 'q'를 반환하고,
     그 외엔 YYYY-MM-DD 형식이 아닐 경우 오류 안내 후 재입력을 받는다."""
     while True:
-        val = ui.safe_input(f"▶ {label} 입력 (YYYY-MM-DD, 생략하려면 그냥 Enter) [q:취소]: ")
+        val = input(f"▶ {label} 입력 (YYYY-MM-DD, 생략하려면 그냥 Enter) [q:취소]: ")
         if val and val.lower() == 'q':
             return 'q'
         if not val:
@@ -164,7 +164,7 @@ def _do_analyze_interactive(with_ai=False):
     date_to = _prompt_date("종료일")
     if date_to == 'q':
         return
-    category = ui.safe_input("▶ 카테고리 입력 (생략하려면 그냥 Enter) [q:취소]: ")
+    category = input("▶ 카테고리 입력 (생략하려면 그냥 Enter) [q:취소]: ")
     if category and category.lower() == 'q':
         return
     fn = run_analyze if with_ai else run_analyze_query

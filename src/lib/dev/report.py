@@ -343,7 +343,7 @@ def run_report_interactive():
     print(f"\n{ui.HL}[ 대화형 리포트 생성 설정 ]{ui.FG}")
     print("안내: 입력을 취소하고 메뉴로 돌아가려면 언제든 'q'를 입력하세요.\n")
 
-    fmt = ui.safe_input("▶ 출력 형식 입력 (console/txt/md, 기본 console) [q:취소]: ")
+    fmt = input("▶ 출력 형식 입력 (console/txt/md, 기본 console) [q:취소]: ")
     if fmt and fmt.lower() == 'q':
         return
     fmt = fmt.strip().lower() if fmt and fmt.strip() else "console"
@@ -352,10 +352,10 @@ def run_report_interactive():
         ui.pause("[Enter]를 눌러 돌아갑니다...")
         return
 
-    date_from = ui.safe_input("▶ 집계 시작일 입력 (예: 2026-08-01, 건너뛰려면 Enter) [q:취소]: ")
+    date_from = input("▶ 집계 시작일 입력 (예: 2026-08-01, 건너뛰려면 Enter) [q:취소]: ")
     if date_from and date_from.lower() == 'q':
         return
-    date_to = ui.safe_input("▶ 집계 종료일 입력 (예: 2026-08-07, 건너뛰려면 Enter) [q:취소]: ")
+    date_to = input("▶ 집계 종료일 입력 (예: 2026-08-07, 건너뛰려면 Enter) [q:취소]: ")
     if date_to and date_to.lower() == 'q':
         return
 
@@ -366,10 +366,10 @@ def run_report_interactive():
 
 def _prompt_optional_date_range():
     """대화형 메뉴에서 선택적으로 --date-from/--date-to를 입력받는다. 취소 시 None을 반환."""
-    date_from = ui.safe_input("▶ 집계 시작일 입력 (예: 2026-08-01, 건너뛰려면 Enter) [q:취소]: ")
+    date_from = input("▶ 집계 시작일 입력 (예: 2026-08-01, 건너뛰려면 Enter) [q:취소]: ")
     if date_from and date_from.lower() == 'q':
         return None
-    date_to = ui.safe_input("▶ 집계 종료일 입력 (예: 2026-08-07, 건너뛰려면 Enter) [q:취소]: ")
+    date_to = input("▶ 집계 종료일 입력 (예: 2026-08-07, 건너뛰려면 Enter) [q:취소]: ")
     if date_to and date_to.lower() == 'q':
         return None
     return (date_from.strip() or None if date_from else None,

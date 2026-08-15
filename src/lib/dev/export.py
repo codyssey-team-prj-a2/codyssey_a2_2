@@ -135,7 +135,7 @@ def run_export_interactive():
         return
 
     print("\n  [옵션 추천] '--status' 파라미터 (미입력 시 기본값 all 적용)")
-    status = ui.safe_input("▶ 상태 필터 입력 (summarized/all, 건너뛰려면 Enter) [q:취소]: ")
+    status = input("▶ 상태 필터 입력 (summarized/all, 건너뛰려면 Enter) [q:취소]: ")
     if status and status.lower() == 'q':
         return
     status = status.strip().lower() if status and status.strip() else "all"
@@ -144,10 +144,10 @@ def run_export_interactive():
         ui.pause("[Enter]를 눌러 돌아갑니다...")
         return
 
-    date_from = ui.safe_input("▶ 조회 시작일 입력 (예: 2026-08-01, 건너뛰려면 Enter) [q:취소]: ")
+    date_from = input("▶ 조회 시작일 입력 (예: 2026-08-01, 건너뛰려면 Enter) [q:취소]: ")
     if date_from and date_from.lower() == 'q':
         return
-    date_to = ui.safe_input("▶ 조회 종료일 입력 (예: 2026-08-07, 건너뛰려면 Enter) [q:취소]: ")
+    date_to = input("▶ 조회 종료일 입력 (예: 2026-08-07, 건너뛰려면 Enter) [q:취소]: ")
     if date_to and date_to.lower() == 'q':
         return
 
