@@ -21,4 +21,5 @@ services:
       # 호스트의 상위 폴더(..)에 있는 디렉토리들을 컨테이너 내부로 연결
       - ../src:/app/src
       - ../data:/app/data
+      - ../script:/app/script
       - ../logs:/app/logs
