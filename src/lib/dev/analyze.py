@@ -3,9 +3,12 @@ import shlex
 import argparse
 from datetime import datetime, timedelta
 
-from lib.system import ui
+from lib.system import ui, logger_mgr
 from lib.common import ai_client
 from lib.db import sqlite_mgr as db
+
+# [추가] 모듈 전용 로거 생성
+logger = logger_mgr.get_logger(__name__)
 
 analyze_parser = argparse.ArgumentParser(prog="analyze", add_help=False)
 analyze_parser.add_argument("--date-from", dest="date_from", default=None)
@@ -66,10 +69,7 @@ def _build_user_prompt(rows):
 
 
 def extract_insight(rows):
-    """뉴스 목록을 AI에 넘겨 트렌드/키워드/시사점을 JSON으로 추출한다.
-
-    JSON 파싱에 실패하면 한 번 더 재시도하고, 그래도 실패하면 예외를 올린다.
-    """
+    """뉴스 목록을 AI에 넘겨 트렌드/키워드/시사점을 JSON으로 추출한다."""
     user_prompt = _build_user_prompt(rows)
     last_error = None
     for attempt in range(1, 3):
@@ -83,11 +83,18 @@ def extract_insight(rows):
             }
         except (json.JSONDecodeError, AttributeError) as e:
             last_error = e
+            # [로그 추가] AI가 JSON 형식을 어겨 파싱에 실패한 후 재시도하는 상황
+            logger.warning(f"AI 응답 JSON 파싱 실패 (시도 {attempt}/2): {e} | 응답: {raw[:50]}...")
+            
+    # [로그 추가] 재시도에도 불구하고 최종 실패한 치명적 상황
+    logger.error(f"AI 응답 JSON 파싱 최종 2회 실패: {last_error}")
     raise RuntimeError(f"AI 응답을 JSON으로 해석하지 못했습니다: {last_error}")
 
 
 def run_analyze(date_from=None, date_to=None, category=None):
     if not ai_client.has_api_key():
+        # [로그 추가] 핵심 키 누락
+        logger.error("AI API 키 미설정으로 종합 인사이트 분석 파이프라인이 중단되었습니다.")
         print(f"\n{ui.ERR}AI API 키가 설정되지 않았습니다. 환경 설정(1번)에서 먼저 등록하세요.{ui.FG}")
         ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
         return
@@ -96,14 +103,21 @@ def run_analyze(date_from=None, date_to=None, category=None):
     date_from, date_to = _resolve_range(date_from, date_to)
     rows = db.query_clean_news(date_from=date_from, date_to=date_to, category=category)
     if not rows:
+        # [로그 추가] 대상이 없어 건너뜀
+        logger.info(f"조건(기간: {date_from}~{date_to}, 분류: {category})에 맞는 뉴스가 없어 분석을 건너뜁니다.")
         print(f"\n{ui.ERR}조건에 맞는 뉴스가 없습니다.{ui.FG}")
         ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
         return
 
+    # [로그 추가] 대규모 분석 시작 알림
+    logger.info(f"AI 종합 인사이트 분석 시작 (대상: {len(rows)}건, 기간: {date_from}~{date_to})")
     print(f"\n{ui.HL}>> 분석 대상 {len(rows)}건 AI 인사이트 추출 중...{ui.FG}")
+    
     try:
         insight = extract_insight(rows)
     except Exception as e:
+        # [로그 추가] API 서버 오류 등 분석 도중 발생한 예외
+        logger.error(f"AI 인사이트 분석 중 통신/파싱 오류 발생: {e}")
         print(f"\n{ui.ERR}[실패] AI 분석 중 오류: {e}{ui.FG}")
         ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
         return
@@ -116,6 +130,9 @@ def run_analyze(date_from=None, date_to=None, category=None):
         "core_keywords": ", ".join(insight["keywords"]),
         "implications": insight["implications"] or "(시사점 없음)",
     })
+
+    # [로그 추가] 분석 성공 및 DB 적재 완료
+    logger.info("AI 종합 인사이트 추출 및 DB 적재 완료 성공")
 
     print(f"\n{ui.HL}[ AI 인사이트 분석 결과 ]{ui.FG}")
     print(f"  - 대상: {len(rows)}건 (기간 {date_from} ~ {date_to}, 카테고리 {category or '전체'})")
@@ -200,6 +217,8 @@ def run_analyze_cli(command_str):
             return
         for label, val in (("--date-from", args.date_from), ("--date-to", args.date_to)):
             if val and not _is_valid_date(val):
+                # [로그 추가] 스케줄러/CLI에서 날짜 형식이 잘못 들어와 실행 거부된 상황
+                logger.warning(f"CLI 입력 오류: {label}에 잘못된 날짜 형식('{val}')이 인입되어 분석을 취소합니다.")
                 print(f"\n{ui.ERR}[오류] {label}는 YYYY-MM-DD 형식으로 입력해 주세요 (예: 2026-08-13).{ui.FG}")
                 ui.pause("[Enter]를 눌러 돌아갑니다...")
                 return

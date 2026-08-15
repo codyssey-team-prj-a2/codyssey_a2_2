@@ -1,4 +1,4 @@
-# lib/dev/fetch.py
+# src/lib/dev/fetch.py
 import argparse
 import re
 import shlex
@@ -9,7 +9,10 @@ import requests
 from bs4 import BeautifulSoup
 
 from lib.db import raw_store
-from lib.system import config_mgr, ui
+from lib.system import config_mgr, ui, logger_mgr
+
+# [추가] 모듈 전용 로거 생성
+logger = logger_mgr.get_logger(__name__)
 
 # CLI 명령어를 코드 내부에서 파싱하기 위한 전용 파서 설정
 fetch_parser = argparse.ArgumentParser(prog="fetch", add_help=False)
@@ -133,6 +136,78 @@ def fetch_via_crawl(source, timeout=DEFAULT_TIMEOUT_SEC):
 
 FETCH_HANDLERS = {"rss": fetch_via_rss, "crawl": fetch_via_crawl}
 
+
+def execute_fetch_logic(source, limit, is_cli=False):
+    """수집 실행 결과 화면 출력 및 로그 기록"""
+    print()
+    ui.draw_line("━")
+    mode_text = "[CLI 모드]" if is_cli else "[대화형 모드]"
+    
+    # [로그 추가] 전체 수집 파이프라인 시작
+    logger.info(f"뉴스 수집 파이프라인 시작 (소스: {source}, 최대 제한: {limit}건, 모드: {mode_text})")
+    
+    print(f"{ui.HL}>> {mode_text} 뉴스 데이터 수집을 시작합니다...{ui.FG}")
+    print(f"   (적용 옵션: source={source}, limit={limit})\n")
+
+    targets = _resolve_sources(source)
+    if not targets:
+        # [로그 추가] 등록되지 않은 소스를 요청한 에러 상황
+        logger.error(f"등록되지 않은 소스 '{source}'를 요청하여 수집을 중단합니다.")
+        print(f"{ui.ERR}'{source}' 이름의 등록된 소스를 찾을 수 없습니다.{ui.FG}")
+        ui.draw_line("━")
+        ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
+        return
+
+    try:
+        limit_int = int(limit)
+        if limit_int <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        # [로그 추가] 파라미터가 잘못되어 강제로 기본값을 쓴 상황을 관리자에게 경고
+        logger.warning(f"잘못된 수집 제한 건수 입력('{limit}'). 기본값(20건)으로 보정되어 진행됩니다.")
+        print(f"{ui.ERR}[오류] 올바른 수집 제한 건수(양의 정수)가 아니므로 기본값 20건을 적용합니다.{ui.FG}")
+        limit_int = 20
+
+    timeout = config_mgr.load_config().get("fetch", {}).get("timeout_sec", DEFAULT_TIMEOUT_SEC)
+
+    total = 0
+    total_fail = 0
+    for src in targets:
+        method = src.get("method", "rss")
+        handler = FETCH_HANDLERS.get(method)
+        if handler is None:
+            # [로그 추가] 기능 미지원 건너뛰기
+            logger.warning(f"[{src.get('name')}] 지원하지 않는 수집 방식('{method}')이므로 건너뜁니다.")
+            print(f"  [건너뜀] {src.get('name')}: '{method}' 수집 방식은 아직 지원하지 않습니다.\n")
+            continue
+
+        print(f"  [수집 진행] {src.get('name')} ({method.upper()}) 데이터 요청 중...")
+        records, error = handler(src, timeout=timeout)
+        if error:
+            # [로그 추가] 개별 피드 통신 실패 (네트워크 등)
+            logger.error(f"[{src.get('name')}] 통신/파싱 실패: {error}")
+            print(f"  {ui.ERR}[실패] {src.get('name')}: {error}{ui.FG}\n")
+            total_fail += 1
+            continue
+
+        records = records[:limit_int]
+        for r in records:
+            raw_store.append(src.get("name", ""), r)
+            print(f"    - {r['title']}")
+        
+        # [로그 추가] 개별 피드 수집 성공 통계
+        logger.info(f"[{src.get('name')}] 수집 완료 ({len(records)}건 적재)")
+        print(f"  └─ [{src.get('name')}] {len(records)}건 추출 및 raw 저장 완료\n")
+        total += len(records)
+
+    ui.draw_line("─")
+    # [로그 추가] 파이프라인 전체 완료 통계
+    logger.info(f"뉴스 수집 파이프라인 종료 (총 {total}건 추출 성공, {total_fail}개 소스 실패)")
+    print(f"{ui.HL}>> 수집 작업이 완료되었습니다! (총 {total}건 추출, 실패 {total_fail}건){ui.FG}")
+    ui.draw_line("━")
+    ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
+
+# ... (아래 run_menu_show, run_fetch_cli, run_fetch_interactive, show_data_status 함수는 기존과 완전히 동일하므로 생략하지 않고 그대로 유지) ...
 
 def run_menu_show():
     """메인 메뉴 루프"""
@@ -294,60 +369,6 @@ def run_fetch_interactive():
             ui.pause("다시 입력하려면 [Enter]를 누르세요...")
 
     execute_fetch_logic(selected_source, limit_val, is_cli=False)
-
-
-def execute_fetch_logic(source, limit, is_cli=False):
-    """수집 실행 결과 화면 출력"""
-    print()
-    ui.draw_line("━")
-    mode_text = "[CLI 모드]" if is_cli else "[대화형 모드]"
-    print(f"{ui.HL}>> {mode_text} 뉴스 데이터 수집을 시작합니다...{ui.FG}")
-    print(f"   (적용 옵션: source={source}, limit={limit})\n")
-
-    targets = _resolve_sources(source)
-    if not targets:
-        print(f"{ui.ERR}'{source}' 이름의 등록된 소스를 찾을 수 없습니다.{ui.FG}")
-        ui.draw_line("━")
-        ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
-        return
-
-    try:
-        limit_int = int(limit)
-        if limit_int <= 0:
-            raise ValueError
-    except (TypeError, ValueError):
-        print(f"{ui.ERR}[오류] 올바른 수집 제한 건수(양의 정수)가 아니므로 기본값 20건을 적용합니다.{ui.FG}")
-        limit_int = 20
-
-    timeout = config_mgr.load_config().get("fetch", {}).get("timeout_sec", DEFAULT_TIMEOUT_SEC)
-
-    total = 0
-    total_fail = 0
-    for src in targets:
-        method = src.get("method", "rss")
-        handler = FETCH_HANDLERS.get(method)
-        if handler is None:
-            print(f"  [건너뜀] {src.get('name')}: '{method}' 수집 방식은 아직 지원하지 않습니다.\n")
-            continue
-
-        print(f"  [수집 진행] {src.get('name')} ({method.upper()}) 데이터 요청 중...")
-        records, error = handler(src, timeout=timeout)
-        if error:
-            print(f"  {ui.ERR}[실패] {src.get('name')}: {error}{ui.FG}\n")
-            total_fail += 1
-            continue
-
-        records = records[:limit_int]
-        for r in records:
-            raw_store.append(src.get("name", ""), r)
-            print(f"    - {r['title']}")
-        print(f"  └─ [{src.get('name')}] {len(records)}건 추출 및 raw 저장 완료\n")
-        total += len(records)
-
-    ui.draw_line("─")
-    print(f"{ui.HL}>> 수집 작업이 완료되었습니다! (총 {total}건 추출, 실패 {total_fail}건){ui.FG}")
-    ui.draw_line("━")
-    ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
 
 
 def show_data_status():

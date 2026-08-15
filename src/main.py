@@ -1,9 +1,12 @@
 # main.py
 import sys
-from lib.system import config_mgr, ui
+from lib.system import config_mgr, ui, logger_mgr
 
 # 1번부터 10번까지 모든 개발 모듈 일괄 임포트
 from lib.dev import setup, fetch, clean, summarize, analyze, report, export, list_news, show, sentiment
+
+logger_mgr.init_logger()
+logger = logger_mgr.get_logger(__name__)
 
 # [라우터 맵] 선택 번호와 해당 모듈의 실행 함수 매핑
 MODULE_MAP = {
@@ -83,9 +86,11 @@ def run_tui():
             input("\n잘못된 입력입니다. [Enter]")
 
 if __name__ == "__main__":
+    logger.info("Codyssey TUI 메인 프로그램이 시작되었습니다.")
     try:
         run_tui()
     except KeyboardInterrupt:
-        print("\n강제 종료되었습니다.")
+        logger.warning("사용자에 의해 프로그램이 강제 종료되었습니다.")
+        print("\n[안내] 프로그램이 강제 종료되었습니다. (Ctrl+C)")
     finally:
         ui.reset_terminal()

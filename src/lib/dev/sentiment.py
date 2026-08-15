@@ -3,9 +3,12 @@ import argparse
 import json
 import shlex
 
-from lib.system import ui
+from lib.system import ui, logger_mgr
 from lib.common import helpers, ai_client
 from lib.db import sqlite_mgr
+
+# [추가] 모듈 전용 로거 생성
+logger = logger_mgr.get_logger(__name__)
 
 VALID_SENTIMENTS = ("긍정", "부정", "중립")
 
@@ -38,6 +41,8 @@ def _classify(news):
 def run_sentiment_analysis(target="unanalyzed", news_id=None, limit=10):
     """대상 뉴스에 AI 감성 분석을 실행하고 결과를 DB에 저장합니다."""
     if not ai_client.has_api_key():
+        # [로그 추가] AI 환경설정 누락 에러
+        logger.error("AI API 키 미설정으로 감성 분석 파이프라인이 중단되었습니다.")
         print(f"\n{ui.ERR}[오류] AI API 키가 설정되지 않았습니다. "
               f"환경 설정(메인 메뉴 1번)에서 먼저 등록하세요.{ui.FG}")
         ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
@@ -45,10 +50,14 @@ def run_sentiment_analysis(target="unanalyzed", news_id=None, limit=10):
 
     rows = sqlite_mgr.get_news_for_sentiment(target, news_id, limit)
     if not rows:
+        # [로그 추가] 대상이 없어 일반 종료
+        logger.info(f"조건(target: {target})에 맞는 감성 분석 대상이 없어 작업을 건너뜁니다.")
         print(f"\n{ui.ERR}[안내] 감성 분석할 대상이 없습니다.{ui.FG}")
         ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
         return
 
+    # [로그 추가] 파이프라인 시작 알림
+    logger.info(f"AI 감성 분석 시작 (대상: {len(rows)}건, 타겟: {target})")
     print(f"\n{ui.HL}>> 감성 분석 대상: {len(rows)}건{ui.FG}")
     success, failed = 0, 0
 
@@ -59,9 +68,13 @@ def run_sentiment_analysis(target="unanalyzed", news_id=None, limit=10):
             print(f"   - [{sentiment}] {row['title']}")
             success += 1
         except Exception as e:
+            # [로그 추가] 개별 뉴스 감성 분석 에러 (API 통신 및 파싱 에러)
+            logger.error(f"[{row['news_id']}] AI 감성 분석 실패: {e}")
             print(f"   - [실패] {row['title']} ({e})")
             failed += 1
 
+    # [로그 추가] 파이프라인 완료 통계
+    logger.info(f"AI 감성 분석 완료 (성공: {success}건, 실패: {failed}건)")
     print(f"\n{ui.HL}>> 감성 분석 완료: 성공 {success}건, 실패 {failed}건{ui.FG}")
     ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
 
@@ -89,6 +102,8 @@ def run_sentiment_cli(command_str):
 
         limit = args.limit
         if limit <= 0:
+            # [로그 추가] 잘못된 제한 건수 파라미터 경고
+            logger.warning(f"잘못된 감성 분석 제한 건수 입력('{limit}'). 기본값(10건)으로 보정되어 실행됩니다.")
             print(f"\n{ui.ERR}[오류] 올바른 감성 분석 제한 건수(양의 정수)가 아니므로 기본값 10건을 적용합니다.{ui.FG}")
             limit = 10
 

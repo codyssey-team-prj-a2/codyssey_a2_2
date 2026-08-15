@@ -1,7 +1,10 @@
 # src/lib/dev/setup.py
 import re
 from pathlib import Path
-from lib.system import config_mgr, ui
+from lib.system import config_mgr, ui, logger_mgr
+
+# [추가] 모듈 전용 로거 생성
+logger = logger_mgr.get_logger(__name__)
 
 DEFAULT_MODELS = {
     "gemini": "gemini-1.5-flash",
@@ -240,6 +243,9 @@ def _edit_api_key_wizard(cfg, curr_prov, curr_model, curr_key):
     config_mgr.set_env("LLM_API_KEY", key)
     config_mgr.save_config(cfg)
     
+    # [로그 추가] 중요 시스템 설정 변경 기록 (보안상 Key 원문은 마스킹하거나 로깅 생략)
+    logger.info(f"시스템 설정 변경: AI 환경 설정 업데이트 완료 (Provider: {provider}, Model: {model})")
+    
     print(f"\n{ui.HL}>> AI 환경 설정이 성공적으로 저장되었습니다!{ui.FG}")
     ui.pause("[Enter]를 누르면 AI 환경 설정 현황으로 돌아갑니다...")
 
@@ -392,6 +398,10 @@ def _add_source_action(cfg):
         "enabled": True
     })
     config_mgr.save_config(cfg)
+    
+    # [로그 추가] 신규 뉴스 소스 파이프라인 추가 기록
+    logger.info(f"시스템 설정 변경: 신규 뉴스 소스 추가 완료 ({name} - 방식: {method})")
+    
     print(f"\n{ui.HL}>> 뉴스 소스 [{name}]이(가) 추가되었습니다!{ui.FG}")
     ui.pause("[Enter]를 누르세요...")
 
@@ -558,6 +568,10 @@ def _edit_source_action(cfg):
             "category": final_cat
         })
         config_mgr.save_config(cfg)
+        
+        # [로그 추가] 기존 뉴스 소스 수정 기록
+        logger.info(f"시스템 설정 변경: 뉴스 소스 수정 완료 (대상: {curr_name} -> {final_name})")
+        
         print(f"\n{ui.HL}>> 소스 [{final_name}] 수정이 완료되었습니다!{ui.FG}")
         ui.pause("[Enter]를 누르면 뉴스 소스 수정 목록으로 돌아갑니다...")
 
@@ -610,6 +624,10 @@ def _delete_source_action(cfg):
         if confirm == 'y':
             del sources[idx]
             config_mgr.save_config(cfg)
+            
+            # [로그 추가] 뉴스 소스 삭제 기록
+            logger.info(f"시스템 설정 변경: 뉴스 소스 삭제 완료 ({target_name})")
+            
             print(f"\n{ui.HL}>> 뉴스 소스 [{target_name}]이(가) 삭제되었습니다!{ui.FG}")
         else:
             print(f"\n{ui.HL}>> 삭제 작업을 취소하였습니다.{ui.FG}")
@@ -675,6 +693,9 @@ def _set_db_path(cfg):
         final_db_path = f"./{clean_folder}/codyssey.db"
         storage["db_path"] = final_db_path
         config_mgr.save_config(cfg)
+        
+        # [로그 추가] DB 저장 경로 변경 기록
+        logger.info(f"시스템 설정 변경: DB 저장 경로 설정 완료 (경로: {final_db_path})")
         
         print(f"\n{ui.HL}>> DB 저장 경로 설정이 완료되었습니다!{ui.FG}")
         print(f"  • 설정 폴더명   : {clean_folder}")
@@ -766,6 +787,9 @@ def _set_log_config(cfg):
         logging_cfg["file"] = final_log_file
         logging_cfg["level"] = selected_level
         config_mgr.save_config(cfg)
+        
+        # [로그 추가] 시스템 로그 레벨 및 경로 설정 변경 기록
+        logger.info(f"시스템 설정 변경: 로그 설정 업데이트 완료 (경로: {final_log_file}, 수준: {selected_level})")
         
         print(f"\n{ui.HL}>> 로그 파일 위치 [src/{clean_dir}/app.log], 수준 [{selected_level}]로 저장되었습니다!{ui.FG}")
         ui.pause("\n[Enter]를 누르면 로그 설정 현황으로 돌아갑니다...")

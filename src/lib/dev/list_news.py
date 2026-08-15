@@ -2,9 +2,12 @@
 import argparse
 import shlex
 
-from lib.system import ui
+from lib.system import ui, logger_mgr
 from lib.db import sqlite_mgr
 from lib.dev import show  # 분리된 show 모듈 임포트
+
+# [추가] 모듈 전용 로거 생성
+logger = logger_mgr.get_logger(__name__)
 
 # CLI 명령어를 코드 내부에서 파싱하기 위한 전용 파서 설정
 list_parser = argparse.ArgumentParser(prog="list", add_help=False, allow_abbrev=False)
@@ -93,6 +96,9 @@ def run_board(page=1, size=10, category=None, date=None, keyword=None):
     curr_date = date
     curr_kw = keyword
     
+    # [로그 추가] 게시판 최초 진입 시 필터 조건 로깅 (사용자 검색 패턴 분석 용도)
+    logger.info(f"뉴스 목록 게시판 진입 (초기설정 - 페이지:{page}, 사이즈:{size}, 분류:{category}, 날짜:{date}, 키워드:{keyword})")
+    
     # 되돌아올 때 사용할 공통 Pause 메시지
     back_msg = "\n[Enter]를 눌러 게시판 목록으로 돌아갑니다..."
     
@@ -168,6 +174,8 @@ def run_list_cli(command_str):
         args, unknown = list_parser.parse_known_args(args_list[1:])
 
         if unknown:
+            # [로그 추가] 지원하지 않는 파라미터가 포함됨
+            logger.warning(f"뉴스 목록 조회 CLI 실행 중 알 수 없는 옵션 감지: {unknown}")
             print(f"\n{ui.ERR}알 수 없는 옵션이 포함되어 있습니다: {unknown}{ui.FG}")
             ui.pause("[Enter]를 눌러 돌아갑니다...")
             return
@@ -175,11 +183,15 @@ def run_list_cli(command_str):
         corrected = False
         
         if args.page <= 0:
+            # [로그 추가] 비정상 페이지 파라미터 보정
+            logger.warning(f"잘못된 페이지 입력({args.page})이 1페이지로 보정되었습니다.")
             print(f"\n{ui.ERR}[안내] 유효하지 않은 페이지 입력({args.page})입니다. 1페이지로 자동 보정합니다.{ui.FG}")
             args.page = 1
             corrected = True
             
         if args.size <= 0:
+            # [로그 추가] 비정상 사이즈 파라미터 보정
+            logger.warning(f"잘못된 표시 건수 입력({args.size})이 1건으로 보정되었습니다.")
             print(f"\n{ui.ERR}[안내] 유효하지 않은 표시 건수 입력({args.size})입니다. 1건으로 자동 보정합니다.{ui.FG}")
             args.size = 1
             corrected = True
@@ -191,9 +203,13 @@ def run_list_cli(command_str):
                   date=args.date, keyword=args.keyword)
 
     except SystemExit:
+        # [로그 추가] 형식에 맞지 않는 파라미터 구문
+        logger.warning(f"뉴스 목록 조회 CLI 파라미터 형식 오류로 거부됨: {command_str}")
         print(f"\n{ui.ERR}[오류] 명령어 형식이 올바르지 않습니다.{ui.FG}")
         ui.pause("[Enter]를 눌러 돌아갑니다...")
     except Exception as e:
+        # [로그 추가] 예상치 못한 파싱 에러 발생 시
+        logger.error(f"뉴스 목록 조회 CLI 파싱 중 알 수 없는 예외 발생: {e}")
         print(f"\n{ui.ERR}[오류] 명령어 파싱 중 에러 발생: {e}{ui.FG}")
         ui.pause("[Enter]를 눌러 돌아갑니다...")
 

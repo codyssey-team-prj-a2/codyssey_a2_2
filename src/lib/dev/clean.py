@@ -6,9 +6,12 @@ from email.utils import parsedate_to_datetime
 
 from bs4 import BeautifulSoup
 
-from lib.system import ui, config_mgr
+from lib.system import ui, config_mgr, logger_mgr
 from lib.db import raw_store
 from lib.db import sqlite_mgr as db
+
+# [추가] 모듈 전용 로거 생성
+logger = logger_mgr.get_logger(__name__)
 
 clean_parser = argparse.ArgumentParser(prog="clean", add_help=False)
 clean_parser.add_argument("--policy", choices=["skip", "upsert"], default=None)
@@ -21,12 +24,7 @@ def _strip_html(text):
 
 
 def _normalize_date(published_at, collected_at):
-    """발행일을 'YYYY-MM-DD' 형식으로 통일한다.
-
-    published_at은 RSS마다 형식이 제각각(RFC822, ISO8601 등)이라 두 방식을
-    순서대로 시도하고, 둘 다 실패하거나 값 자체가 없으면(결측값) 수집 시각
-    (collected_at)의 날짜로 대체한다. 그마저도 없으면 오늘 날짜를 쓴다.
-    """
+    """발행일을 'YYYY-MM-DD' 형식으로 통일한다."""
     for parser in (parsedate_to_datetime, datetime.fromisoformat):
         if not published_at:
             break
@@ -91,14 +89,11 @@ def run_clean_preview():
 
 
 def run_clean(policy=None):
-    """raw 저장소를 읽어 정제 후 clean_news 테이블에 저장한다.
-
-    policy가 'skip'이면 이미 저장된 news_id(URL)는 건드리지 않고 건너뛰고,
-    'upsert'면 title/content를 최신 내용으로 덮어쓴다. 미지정 시
-    config.json의 fetch.duplicate_policy(기본값 'skip')를 따른다.
-    """
+    """raw 저장소를 읽어 정제 후 clean_news 테이블에 저장한다."""
     policy = policy or config_mgr.load_config().get("fetch", {}).get("duplicate_policy", "skip")
     if policy not in ("skip", "upsert"):
+        # [로그 추가] 잘못된 정책 지정으로 인한 정제 실패
+        logger.error(f"알 수 없는 중복 정책으로 인해 정제 작업을 중단합니다: {policy}")
         print(f"\n{ui.ERR}알 수 없는 중복 정책입니다: {policy} (skip 또는 upsert만 가능){ui.FG}")
         ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
         return
@@ -106,9 +101,14 @@ def run_clean(policy=None):
     db.initialize_db()
     raw_records = raw_store.read_all()
     if not raw_records:
+        # [로그 추가] 처리할 데이터가 없어서 스킵되는 상황
+        logger.warning("정제할 raw 데이터가 존재하지 않아 정제 작업을 건너뜁니다.")
         print(f"\n{ui.ERR}정제할 raw 데이터가 없습니다. 먼저 뉴스 수집(fetch)을 실행하세요.{ui.FG}")
         ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
         return
+
+    # [로그 추가] 실제 작업 시작 알림
+    logger.info(f"데이터 정제 작업을 시작합니다. (대상: {len(raw_records)}건, 정책: {policy})")
 
     invalid = 0
     inserted = 0
@@ -129,7 +129,14 @@ def run_clean(policy=None):
         inserted += 1
         to_save.append(cleaned)
 
-    saved = db.upsert_clean_news(to_save) if to_save else 0
+    try:
+        saved = db.upsert_clean_news(to_save) if to_save else 0
+        # [로그 추가] 작업 완료 통계
+        logger.info(f"데이터 정제 완료: 총 {len(raw_records)}건 중 {saved}건 DB 저장 성공 (필드 누락 제외: {invalid}건, 중복 스킵: {duplicate_skipped}건)")
+    except Exception as e:
+        # [로그 추가] DB 연동 과정에서 발생한 예상치 못한 오류
+        logger.error(f"정제된 데이터 DB 저장 중 치명적 오류 발생: {e}")
+        saved = 0
 
     print(f"\n{ui.HL}[ 정제 결과 (정책: {policy}) ]{ui.FG}")
     print(f"  - raw 전체: {len(raw_records)}건")

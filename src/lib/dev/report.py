@@ -9,9 +9,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib import font_manager
 
-from lib.system import ui, config_mgr
+from lib.system import ui, config_mgr, logger_mgr
 from lib.common import helpers
 from lib.db import sqlite_mgr
+
+logger = logger_mgr.get_logger(__name__)
 
 _KOREAN_FONT_CANDIDATES = ["Malgun Gothic", "NanumGothic", "AppleGothic"]
 
@@ -303,9 +305,11 @@ def run_report(date_from=None, date_to=None, fmt="console"):
     content = build_report_content(date_from, date_to, fmt)
 
     if fmt == "console":
+        logger.info(f"종합 리포트 콘솔 조회 (조회 기간: {date_from}~{date_to})")
         print(f"\n{ui.HL}{content}{ui.FG}")
     else:
         path = save_report_file(content, fmt)
+        logger.info(f"종합 리포트 파일({fmt.upper()}) 저장 완료: {path}")
         print(f"\n{ui.HL}>> {fmt.upper()} 리포트 파일이 저장되었습니다.{ui.FG}")
         print(f"   저장 경로: {path}")
 
@@ -326,9 +330,11 @@ def run_report_cli(command_str):
         run_report(args.date_from, args.date_to, args.format)
 
     except SystemExit:
+        logger.warning(f"잘못된 형식의 옵션이 입력되어 리포트 생성을 취소합니다. 명령어: {command_str}")
         print("\n[오류] '--format' 옵션은 console, txt, md 중 하나여야 합니다.")
         ui.pause("[Enter]를 눌러 돌아갑니다...")
     except Exception as e:
+        logger.error(f"명령어 파싱 중 오류 발생: {e}")
         print(f"\n[오류] 명령어 파싱 중 에러 발생: {e}")
         ui.pause("[Enter]를 눌러 돌아갑니다...")
 
@@ -373,9 +379,11 @@ def _prompt_optional_date_range():
 def _generate_and_report(chart_func, label, date_from=None, date_to=None):
     try:
         path = chart_func(date_from, date_to)
+        logger.info(f"시각화 차트 생성 완료 ({label}): {path}")
         print(f"\n{ui.HL}>> {label}이(가) 생성되었습니다.{ui.FG}")
         print(f"   저장 경로: {path}")
     except Exception as e:
+        logger.error(f"시각화 차트('{label}') 렌더링/저장 중 오류 발생: {e}")
         print(f"\n{ui.ERR}[오류] 차트 생성 중 문제가 발생했습니다: {e}{ui.FG}")
     ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
 
@@ -423,10 +431,12 @@ def run_menu_show():
                     paths = [chart_category_distribution(date_from, date_to),
                              chart_daily_trend(date_from, date_to),
                              chart_sentiment_distribution(date_from, date_to)]
+                    logger.info(f"전체 시각화 차트 {len(paths)}건 일괄 생성 완료")
                     print(f"\n{ui.HL}>> 차트 {len(paths)}건이 생성되었습니다.{ui.FG}")
                     for path in paths:
                         print(f"   - {path}")
                 except Exception as e:
+                    logger.error(f"전체 시각화 차트 일괄 생성 중 오류 발생: {e}")
                     print(f"\n{ui.ERR}[오류] 차트 생성 중 문제가 발생했습니다: {e}{ui.FG}")
                 ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
         elif choice == '4':

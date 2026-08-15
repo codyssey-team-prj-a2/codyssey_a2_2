@@ -2,8 +2,11 @@
 import argparse
 import shlex
 
-from lib.system import ui
+from lib.system import ui, logger_mgr
 from lib.db import sqlite_mgr
+
+# [추가] 모듈 전용 로거 생성
+logger = logger_mgr.get_logger(__name__)
 
 # 상세 조회 CLI 파서 (allow_abbrev=False 로 --n 입력 차단)
 show_parser = argparse.ArgumentParser(prog="show", add_help=False, allow_abbrev=False)
@@ -51,8 +54,12 @@ def run_show(target_idx, pause_msg="[Enter]를 눌러 메뉴로 돌아갑니다.
     """DB에서 번호로 조회 후 상세 화면 출력"""
     news_item = sqlite_mgr.get_news_by_id(target_idx)
     if news_item:
+        # [로그 추가] 성공적인 기사 열람 기록
+        logger.info(f"뉴스 상세 조회 수행 (기사 번호: {target_idx})")
         show_detail(news_item)
     else:
+        # [로그 추가] 삭제되었거나 없는 번호에 접근 시도
+        logger.warning(f"존재하지 않는 뉴스 상세 조회 시도 (기사 번호: {target_idx})")
         print(f"\n{ui.ERR}[안내] 번호 '{target_idx}'에 해당하는 기사를 찾을 수 없습니다.{ui.FG}")
     
     ui.pause(pause_msg)
@@ -65,6 +72,8 @@ def run_show_cli(command_str, pause_msg="[Enter]를 눌러 메뉴로 돌아갑�
         args, unknown = show_parser.parse_known_args(args_list[1:])
 
         if unknown:
+            # [로그 추가] CLI 옵션 알 수 없음
+            logger.warning(f"상세 조회 CLI 실행 중 알 수 없는 옵션 감지: {unknown}")
             print(f"\n{ui.ERR}알 수 없는 옵션이 포함되어 있습니다: {unknown}{ui.FG}")
             ui.pause(pause_msg)
             return
@@ -72,9 +81,13 @@ def run_show_cli(command_str, pause_msg="[Enter]를 눌러 메뉴로 돌아갑�
         run_show(args.no, pause_msg)
 
     except SystemExit:
+        # [로그 추가] 필수 파라미터(--no) 누락
+        logger.warning(f"상세 조회 CLI 필수 파라미터 누락 또는 형식 오류: {command_str}")
         print(f"\n{ui.ERR}'show --no 번호' 형식으로 정확히 입력하세요. (예: show --no 10){ui.FG}")
         ui.pause(pause_msg)
     except Exception as e:
+        # [로그 추가] 알 수 없는 구문 파싱 에러
+        logger.error(f"상세 조회 CLI 파싱 중 예외 발생: {e}")
         print(f"\n{ui.ERR}[오류] 명령어 파싱 중 에러 발생: {e}{ui.FG}")
         ui.pause(pause_msg)
 
@@ -90,6 +103,7 @@ def run_show_interactive():
     if no_input.isdigit():
         run_show(int(no_input))
     else:
+        # 화면 피드백만 주고 로깅은 스킵 (사용자 오타)
         print(f"\n{ui.ERR}[오류] 기사 번호는 숫자만 입력해 주세요.{ui.FG}")
         ui.pause("[Enter]를 눌러 돌아갑니다...")
 

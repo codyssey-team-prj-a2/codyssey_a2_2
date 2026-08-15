@@ -1,9 +1,13 @@
+# src/lib/dev/summarize.py
 import shlex
 import argparse
 
-from lib.system import ui
+from lib.system import ui, logger_mgr
 from lib.common import ai_client
 from lib.db import sqlite_mgr as db
+
+# [추가] 모듈 전용 로거 생성
+logger = logger_mgr.get_logger(__name__)
 
 summarize_parser = argparse.ArgumentParser(prog="summarize", add_help=False)
 summarize_parser.add_argument("--unsummarized", action="store_true")
@@ -25,6 +29,8 @@ def summarize_one(title, content):
 def run_summarize_preview():
     """API 연동 확인용: 기사 하나를 직접 입력받아 요약 결과만 보여준다(아직 DB 반영 없음)."""
     if not ai_client.has_api_key():
+        # [로그 추가] 설정 누락 에러
+        logger.error("AI API 키 미설정으로 요약 미리보기를 실행할 수 없습니다.")
         print(f"\n{ui.ERR}AI API 키가 설정되지 않았습니다. 환경 설정(1번)에서 먼저 등록하세요.{ui.FG}")
         ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
         return
@@ -40,6 +46,8 @@ def run_summarize_preview():
     try:
         summary = summarize_one(title, content)
     except Exception as e:
+        # [로그 추가] 테스트 과정 중 발생한 AI 통신 오류
+        logger.error(f"AI 요약 미리보기 중 통신/생성 오류 발생: {e}")
         print(f"\n{ui.ERR}[실패] AI 요약 중 오류: {e}{ui.FG}")
         ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
         return
@@ -52,6 +60,8 @@ def run_summarize_preview():
 def run_summarize_unsummarized(limit=10):
     """is_summarized=0인 기사를 최대 limit건 가져와 AI 요약하고 DB에 반영한다."""
     if not ai_client.has_api_key():
+        # [로그 추가] 백그라운드 등에서 인증 없이 파이프라인이 돌았을 때의 치명적 에러
+        logger.error("AI API 키 미설정으로 일괄 요약 파이프라인이 중단되었습니다.")
         print(f"\n{ui.ERR}AI API 키가 설정되지 않았습니다. 환경 설정(1번)에서 먼저 등록하세요.{ui.FG}")
         ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
         return
@@ -59,10 +69,14 @@ def run_summarize_unsummarized(limit=10):
     db.initialize_db()
     rows = db.get_unsummarized_news(limit=limit)
     if not rows:
+        # [로그 추가] 대기열이 비어있는 일반적인(정상적인) 상황
+        logger.info("대기 중인 미요약 기사가 없어 AI 3줄 요약 작업을 건너뜁니다.")
         print(f"\n{ui.HL}요약할 미요약 기사가 없습니다.{ui.FG}")
         ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
         return
 
+    # [로그 추가] 파이프라인 시작
+    logger.info(f"AI 3줄 요약 파이프라인 시작 (대상: {len(rows)}건)")
     print(f"\n{ui.HL}>> 미요약 기사 {len(rows)}건 AI 요약 시작...{ui.FG}")
     success, failed = 0, 0
     for row in rows:
@@ -72,9 +86,13 @@ def run_summarize_unsummarized(limit=10):
             print(f"   [완료] {row['title']}")
             success += 1
         except Exception as e:
+            # [로그 추가] 개별 기사의 AI 통신 실패 (Quota 제한, 타임아웃, 정책 위반 등)
+            logger.error(f"[{row['news_id']}] AI 요약 생성 실패: {e}")
             print(f"   {ui.ERR}[실패] {row['title']}: {e}{ui.FG}")
             failed += 1
 
+    # [로그 추가] 파이프라인 완료 통계
+    logger.info(f"AI 3줄 요약 파이프라인 종료 (성공: {success}건, 실패: {failed}건)")
     print(f"\n{ui.HL}[ 요약 결과 ]{ui.FG}")
     print(f"  - 대상: {len(rows)}건")
     print(f"  - 성공(DB 반영): {success}건")
@@ -129,6 +147,8 @@ def run_summarize_cli(command_str):
         if args.unsummarized:
             limit = args.limit
             if limit <= 0:
+                # [로그 추가] 파라미터가 잘못되어 기본값으로 강제 적용한 상황 경고
+                logger.warning(f"잘못된 요약 제한 건수 입력('{limit}'). 기본값(10건)으로 보정되어 실행됩니다.")
                 print(f"\n{ui.ERR}[오류] 올바른 요약 제한 건수(양의 정수)가 아니므로 기본값 10건을 적용합니다.{ui.FG}")
                 limit = 10
             run_summarize_unsummarized(limit=limit)

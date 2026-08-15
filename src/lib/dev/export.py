@@ -8,9 +8,12 @@ from datetime import datetime
 
 import pandas as pd
 
-from lib.system import ui, config_mgr
+from lib.system import ui, config_mgr, logger_mgr
 from lib.common import helpers
 from lib.db import sqlite_mgr
+
+# [추가] 모듈 전용 로거 생성
+logger = logger_mgr.get_logger(__name__)
 
 EXPORT_FIELDS = [
     "news_id", "source", "category", "title", "content",
@@ -69,6 +72,8 @@ def run_export(fmt, status="all", date_from=None, date_to=None):
     rows = sqlite_mgr.get_news_for_export(status, date_from, date_to)
 
     if not rows:
+        # [로그 추가] 내보낼 데이터가 없는 일반적 상황
+        logger.info(f"조건(상태: {status}, 기간: {date_from}~{date_to})에 맞는 데이터가 없어 내보내기를 건너뜁니다.")
         print(f"\n{ui.ERR}[안내] 조건에 맞는 데이터가 없어 내보낼 항목이 없습니다.{ui.FG}")
         ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
         return
@@ -78,9 +83,13 @@ def run_export(fmt, status="all", date_from=None, date_to=None):
 
     try:
         _EXPORTERS[fmt](rows, path)
+        # [로그 추가] 파일 생성 성공 기록
+        logger.info(f"데이터 내보내기 성공: {len(rows)}건을 {fmt.upper()} 형식으로 저장 완료 ({path})")
         print(f"\n{ui.HL}>> {len(rows)}건이 {fmt.upper()} 형식으로 내보내기 완료되었습니다.{ui.FG}")
         print(f"   저장 경로: {path}")
     except Exception as e:
+        # [로그 추가] 디스크 I/O 오류 또는 라이브러리 오류
+        logger.error(f"데이터 내보내기({fmt.upper()}) 중 치명적 오류 발생: {e}")
         print(f"\n{ui.ERR}[오류] 내보내기 중 문제가 발생했습니다: {e}{ui.FG}")
 
     ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
@@ -93,6 +102,7 @@ def run_export_cli(command_str):
         args, unknown = export_parser.parse_known_args(args_list[1:])
 
         if unknown:
+            logger.warning(f"내보내기 CLI 실행 중 알 수 없는 옵션 감지: {unknown}")
             print(f"\n알 수 없는 옵션이 포함되어 있습니다: {unknown}")
             ui.pause("[Enter]를 눌러 돌아갑니다...")
             return
@@ -100,10 +110,13 @@ def run_export_cli(command_str):
         run_export(args.format, args.status, args.date_from, args.date_to)
 
     except SystemExit:
+        # [로그 추가] 파라미터 누락 등 설정 오류
+        logger.warning(f"필수 파라미터 누락 또는 잘못된 포맷 지정으로 실행이 거부됨: {command_str}")
         print("\n[오류] 필수 파라미터가 누락되었거나 값이 올바르지 않습니다. "
               "'--format'은 csv/jsonl/excel 중 하나로 반드시 지정하세요.")
         ui.pause("[Enter]를 눌러 돌아갑니다...")
     except Exception as e:
+        logger.error(f"내보내기 CLI 파싱 중 알 수 없는 예외 발생: {e}")
         print(f"\n[오류] 명령어 파싱 중 에러 발생: {e}")
         ui.pause("[Enter]를 눌러 돌아갑니다...")
 
