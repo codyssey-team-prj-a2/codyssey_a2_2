@@ -48,7 +48,7 @@ chmod +x run.sh
 python3 main.py
 ```
 
-- `docker-compose.yml`을 통해 호스트의 `src/`, `data/`, `logs/` 폴더가 컨테이너 내부로 실시간 마운트된다[cite: 1].
+- `docker-compose.yml`을 통해 호스트의 `src/`, `data/`, `logs/`, `script/` 폴더가 컨테이너 내부로 실시간 마운트된다[cite: 1].
 
 ### 2.3 로컬 Python 직접 실행 방법
 
@@ -76,22 +76,20 @@ python3 main.py
 =================================================
   코디세이(Codyssey) 뉴스 데이터 분석 플랫폼
 =================================================
-  상태: 환경설정 (4/4 완료)
-
-  1. 환경 설정 (완료)
-  2. 뉴스 수집 (fetch)
-  3. 데이터 정제 (clean)
-  4. AI 3줄 요약 (summarize)
-  5. AI 종합 인사이트 분석 (analyze)
-  6. 품질 지표 및 시각화 차트 출력 (report)
-  7. 데이터 내보내기 (export)
-=================================================
-  8. 뉴스 목록 조회 (list) [보너스]
-  9. 뉴스 상세 조회 (show) [보너스]
- 10. AI 감성 분석 (sentiment) [보너스]
+  0. 환경 설정 (4/4 완료 - AI:O | 뉴스:O | DB:O | 로그:O)
+───────────────────────────────────────────────────
+  1. 뉴스 수집 (fetch)
+  2. 데이터 정제 (clean)
+  3. AI 3줄 요약 (summarize)
+  4. AI 종합 인사이트 분석 (analyze)
+───────────────────────────────────────────────────
+  5. 뉴스 목록 조회 (list)
+  6. AI 감성 분석 (sentiment)
+  7. 품질 지표 및 시각화 차트 출력 (report)
+  8. 데이터 내보내기 (export)
 
   Q. 시스템 종료
-=================================================
+───────────────────────────────────────────────────
 ```
 
 ### 3.2 CLI 서브커맨드 직접 실행 명령어 예시
@@ -133,7 +131,7 @@ python3 main.py
 8. **뉴스 목록 및 상세 조회 (`list`, `show`)**:
    ```bash
    Codyssey/list > list --page 1 --size 10 --category IT
-   Codyssey/show > show --id [https://news.google.com/rss/articles/](https://news.google.com/rss/articles/)...
+   Codyssey/show > show --no 20
    ```
 
 ---
@@ -243,4 +241,4 @@ Main 브랜치 (main)
 4. [**CLI 및 AI 프롬프트 명세서**](./documentation/result/4.CLI_및_AI_프롬프트명세서.md)
 5. [**테스트 계획 및 시나리오 정의서**](./documentation/result/5.테스트계획_및_시나리오정의서.md)
 6. [**테스트 시트**](./documentation/test/QA_체크리스트_환경설정테스트.xlsx)
-7. [**정기 실행 스케줄링 가이드**](./documentation/result/7.정기실행_스케줄링_가이드.md)
+7. [**정기 실행 스케줄링 가이드**](./documentation/result/6-1.정기실행_스케줄링_가이드.md)

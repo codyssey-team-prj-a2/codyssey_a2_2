@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS clean_news (
     
     ai_summary TEXT,                    -- AI가 생성한 3줄 요약문 (초기엔 NULL)
     is_summarized INTEGER DEFAULT 0,    -- 요약 완료 여부 (0: 안됨, 1: 완료) [--unsummarized 필터링용]
-    
+    sentiment TEXT,                     -- AI가 분석한 감정 (긍정, 부정, 중립)
+    sentiment_reason TEXT,              -- 감정 분석 근거 문장 (최대 200자)
     created_at TEXT DEFAULT CURRENT_TIMESTAMP -- DB 저장 시각
 );
 

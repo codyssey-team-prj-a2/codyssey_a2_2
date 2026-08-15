@@ -1,4 +1,4 @@
-# lib/dev/setup.py
+# src/lib/dev/setup.py
 import re
 from pathlib import Path
 from lib.system import config_mgr, ui
@@ -57,10 +57,7 @@ def run_menu_show():
         ai_st = "완료" if status_map["setup_ai"] else "미완료"
         news_cnt = len(cfg.get("news_sources", []))
         news_st = f"완료 ({news_cnt}개)" if status_map["setup_news"] else "미완료"
-        
-        db_path_val = cfg.get("storage", {}).get("db_path")
-        db_st = "완료" if bool(db_path_val) else "미완료"
-        
+        db_st = "완료" if status_map["setup_db"] else "미완료"
         log_st = "완료" if status_map["setup_log"] else "미완료"
 
         print(f"  1. AI 환경 설정 (플랫폼/모델/Key) [{ai_st}]")
@@ -69,10 +66,9 @@ def run_menu_show():
         print(f"  4. 로그 폴더 경로/수준 설정     [{log_st}]\n")
         
         ui.draw_line("─")
-
         print(f"\n  {ui.FG}💡 번호 선택  |  {ui.HL}[P]{ui.FG} 상위 메뉴로")
-
         ui.draw_line("─")
+        
         prompt_str = f"{ui.rl_color(ui.HL)} Codyssey/setup > {ui.rl_color(ui.FG)}"
         choice = input(prompt_str).strip().lower()
         
@@ -238,12 +234,10 @@ def _edit_api_key_wizard(cfg, curr_prov, curr_model, curr_key):
             return
         key = key_input
 
-    # 변경사항 저장
+    # 변경사항 저장 (.env 및 config.json)
     config_mgr.set_env("LLM_PROVIDER", provider)
     config_mgr.set_env("LLM_MODEL", model)
     config_mgr.set_env("LLM_API_KEY", key)
-    
-    cfg["setup_ai"] = True
     config_mgr.save_config(cfg)
     
     print(f"\n{ui.HL}>> AI 환경 설정이 성공적으로 저장되었습니다!{ui.FG}")
@@ -300,7 +294,7 @@ def _add_source_action(cfg):
     """신규 뉴스 소스 추가"""
     ui.clear_screen()
     ui.draw_header(" 신규 뉴스 소스 추가 ")
-    sources = cfg.get("news_sources", [])
+    sources = cfg.setdefault("news_sources", [])
     
     while True:
         print(f"\n{ui.FG}▶ 소스 이름을 입력하세요 (공백 불가, 예: naver_it_rss).")
@@ -397,14 +391,13 @@ def _add_source_action(cfg):
         "category": category,
         "enabled": True
     })
-    cfg["setup_news"] = True
     config_mgr.save_config(cfg)
     print(f"\n{ui.HL}>> 뉴스 소스 [{name}]이(가) 추가되었습니다!{ui.FG}")
     ui.pause("[Enter]를 누르세요...")
 
 
 def _edit_source_action(cfg):
-    """기존 뉴스 소스 수정 (수정 화면 루프 및 P: 상위 메뉴로 적용)"""
+    """기존 뉴스 소스 수정"""
     while True:
         sources = cfg.get("news_sources", [])
         if not sources:
@@ -570,7 +563,7 @@ def _edit_source_action(cfg):
 
 
 def _delete_source_action(cfg):
-    """기존 뉴스 소스 삭제 (삭제 화면 루프 및 P: 상위 메뉴로 적용)"""
+    """기존 뉴스 소스 삭제"""
     while True:
         sources = cfg.get("news_sources", [])
         if not sources:
@@ -633,21 +626,22 @@ def _set_db_path(cfg):
         ui.draw_header(" DB 저장 폴더 경로 설정 ")
         
         storage = cfg.setdefault("storage", {})
-        curr_path = storage.get("db_path")
-        has_existing = bool(curr_path)
+        curr_path = storage.get("db_path", "./data/codyssey.db")
+        has_existing = bool(storage.get("db_path"))
         
-        curr_folder = str(Path(curr_path).parent) if has_existing else "미설정"
-        display_path = curr_path if has_existing else "미설정"
+        curr_folder = str(Path(curr_path).parent).replace("\\", "/")
+        if curr_folder.startswith("./"):
+            curr_folder = curr_folder[2:]
 
         ui.draw_line("─")
         print(f"{ui.HL}  [ 현재 DB 저장 경로 설정 내용 ]{ui.FG}")
         print(f"  • 입력된 폴더명 : {ui.HL}{curr_folder}{ui.FG}")
-        print(f"  • 실제 DB 경로   : {display_path}")
+        print(f"  • 실제 파일 위치: src/{curr_folder}/codyssey.db")
         ui.draw_line("─")
         
         print(f"\n{ui.HL}  [ 안내 및 입력 예시 ]{ui.FG}")
-        print("  • DB 파일명(codyssey.db)은 고정되며, 저장할 폴더 위치만 입력합니다.")
-        print("  • 'data' 입력 시 ➔ 'src/data/codyssey.db' 로 자동 정규화되어 저장됩니다.\n")
+        print("  • DB 파일명(codyssey.db)은 고정되며, src/ 하위 폴더 위치만 입력합니다.")
+        print("  • 'data' 입력 시 ➔ 'src/data/codyssey.db' 에 저장됩니다.\n")
         
         if has_existing:
             ui.draw_line("─")
@@ -664,25 +658,29 @@ def _set_db_path(cfg):
             break
             
         if not input_dir:
-            if has_existing:
-                final_folder = curr_folder
-            else:
-                final_folder = "src/data"
+            raw_folder = curr_folder if has_existing else "data"
         else:
-            final_folder = input_dir
+            raw_folder = input_dir
 
-        p = Path(final_folder)
-        if not str(p).startswith("src"):
-            p = Path("src") / p
+        # 'src/data' -> 'data' 정규화
+        clean_folder = raw_folder.strip().replace("\\", "/").lstrip("./")
+        if clean_folder.startswith("src/"):
+            clean_folder = clean_folder[4:]
+        elif clean_folder == "src":
+            clean_folder = "data"
             
-        final_db_path = str(p / "codyssey.db")
+        if not clean_folder:
+            clean_folder = "data"
+
+        final_db_path = f"./{clean_folder}/codyssey.db"
         storage["db_path"] = final_db_path
         config_mgr.save_config(cfg)
         
         print(f"\n{ui.HL}>> DB 저장 경로 설정이 완료되었습니다!{ui.FG}")
-        print(f"  • 입력된 폴더명 : {p}")
-        print(f"  • 실제 DB 경로   : {final_db_path}")
+        print(f"  • 설정 폴더명   : {clean_folder}")
+        print(f"  • 실제 파일 위치: src/{clean_folder}/codyssey.db")
         ui.pause("\n[Enter]를 누르면 DB 설정 현황으로 돌아갑니다...")
+        break
 
 
 # ----------------------------------------------------
@@ -694,39 +692,52 @@ def _set_log_config(cfg):
         ui.draw_header(" 로그 폴더 경로 및 수준 설정 ")
         
         logging_cfg = cfg.setdefault("logging", {})
-        curr_file = logging_cfg.get("file", "src/logs/app.log")
+        curr_file = logging_cfg.get("file", "./logs/app.log")
         curr_level = logging_cfg.get("level", "INFO")
         
+        curr_folder = str(Path(curr_file).parent).replace("\\", "/")
+        if curr_folder.startswith("./"):
+            curr_folder = curr_folder[2:]
+
         ui.draw_line("─")
         print(f"{ui.HL}  [ 현재 로그 설정 내용 ]{ui.FG}")
-        print(f"  • 현재 로그 파일 경로 : {curr_file}")
-        print(f"  • 현재 기록 로그 수준 : {curr_level}")
-        print(f"  • 안내 : 로그 파일명(app.log)은 고정되며 폴더 위치만 설정합니다.")
+        print(f"  • 현재 로그 위치 : src/{curr_folder}/app.log")
+        print(f"  • 현재 로그 수준 : {curr_level}")
+        print(f"  • 안내           : 로그 파일명(app.log)은 고정되며 src/ 하위 폴더만 설정합니다.")
         ui.draw_line("─")
-        print("\n  예시) 'logs' 또는 'src/logs' 입력 시 ➔ 'src/logs/app.log' 로 정규화됩니다.\n")
+        print(f"\n  예시) 'logs' 입력 시 ➔ 'src/logs/app.log' 에 저장됩니다.\n")
         
         ui.draw_line("─")
         print(f"{ui.FG}▶ 새로운 로그 폴더명을 입력하세요.")
-        prompt_str = f"{ui.rl_color(ui.HL)}[C: 취소 | Enter: 현재 설정 유지 ({Path(curr_file).parent})] > {ui.rl_color(ui.FG)}"
+        prompt_str = f"{ui.rl_color(ui.HL)}[C: 취소 | Enter: 현재 설정 유지 ({curr_folder})] > {ui.rl_color(ui.FG)}"
         new_dir = input(prompt_str).strip()
         
         if new_dir.lower() in ['c']:
             break
             
         if not new_dir:
-            p = Path(curr_file).parent
+            raw_dir = curr_folder
         else:
-            p = Path(new_dir)
-            if not str(p).startswith("src"):
-                p = Path("src") / p
-        final_log_file = str(p / "app.log")
+            raw_dir = new_dir
+            
+        # 'src/logs' -> 'logs' 로 정규화
+        clean_dir = raw_dir.strip().replace("\\", "/").lstrip("./")
+        if clean_dir.startswith("src/"):
+            clean_dir = clean_dir[4:]
+        elif clean_dir == "src":
+            clean_dir = "logs"
+            
+        if not clean_dir:
+            clean_dir = "logs"
+            
+        final_log_file = f"./{clean_dir}/app.log"
         
         level_choice = None
         selected_level = curr_level
         while True:
             print("\n  [ 기록할 로그 수준 선택 ]")
-            print("  1) DEBUG   : 세부 개발 및 분석 데이터 포함 모든 정보 기록")
-            print("  2) INFO    : 일반적인 실행 흐름 기록 (권장)")
+            print("  1) DEBUG    : 세부 개발 및 분석 데이터 포함 모든 정보 기록")
+            print("  2) INFO     : 일반적인 실행 흐름 기록 (권장)")
             print("  3) WARNING : 당장 멈추지는 않는 주의 사항 기록")
             print("  4) ERROR   : 에러 발생 시에만 기록\n")
             
@@ -754,8 +765,8 @@ def _set_log_config(cfg):
 
         logging_cfg["file"] = final_log_file
         logging_cfg["level"] = selected_level
-        cfg["setup_log"] = True
         config_mgr.save_config(cfg)
         
-        print(f"\n{ui.HL}>> 로그 경로 [{final_log_file}], 수준 [{selected_level}]로 저장되었습니다!{ui.FG}")
+        print(f"\n{ui.HL}>> 로그 파일 위치 [src/{clean_dir}/app.log], 수준 [{selected_level}]로 저장되었습니다!{ui.FG}")
         ui.pause("\n[Enter]를 누르면 로그 설정 현황으로 돌아갑니다...")
+        break
