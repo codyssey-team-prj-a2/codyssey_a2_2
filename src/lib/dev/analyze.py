@@ -3,7 +3,7 @@ import shlex
 import argparse
 from datetime import datetime, timedelta
 
-from lib.system import ui, logger_mgr
+from lib.system import ui, logger_mgr, help_mgr
 from lib.common import ai_client
 from lib.db import sqlite_mgr as db
 
@@ -184,7 +184,7 @@ def run_menu_show():
         print("  2. AI 인사이트 분석 실행 (트렌드/키워드/시사점 추출, DB 저장)")
         print("  p. 이전 메뉴로 돌아가기 (상위 메뉴)\n")
 
-        print(f"{ui.HL}  [ CLI 직접 입력 예시 ]{ui.FG}")
+        print(f"{ui.HL}  [ CLI 입력 (H : 도움말) ]{ui.FG}")
         print("  analyze --date-from Y-M-D --date-to Y-M-D [--category C]")
         print("  (입력 예: analyze --date-from 2026-08-01 --date-to 2026-08-07)")
 
@@ -202,6 +202,8 @@ def run_menu_show():
             _do_analyze_interactive(with_ai=True)
         elif user_input.startswith("analyze"):
             run_analyze_cli(user_input)
+        elif user_input == 'h':
+            help_mgr.show_help("analyze")
         else:
             print("\n올바르지 않은 명령어나 번호입니다.")
             ui.pause("다시 시도하려면 [Enter]를 누르세요...")

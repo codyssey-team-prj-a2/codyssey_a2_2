@@ -8,7 +8,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from lib.system import ui, config_mgr, logger_mgr
+from lib.system import ui, config_mgr, logger_mgr, help_mgr
 from lib.common import helpers
 from lib.db import sqlite_mgr
 
@@ -178,7 +178,7 @@ def run_menu_show():
         print("  2. 현재 내보내기 대상 데이터 수 확인")
         print("  p. 이전 메뉴로 돌아가기 (상위 메뉴)\n")
 
-        print(f"{ui.HL}  [ CLI 직접 입력 예시 ]{ui.FG}")
+        print(f"{ui.HL}  [ CLI 입력 (H : 도움말) ]{ui.FG}")
         print("  export --format [csv|jsonl|excel] [--status summarized|all] [--date-from ..] [--date-to ..]")
         print("  (입력 예: export --format csv --status summarized)")
 
@@ -194,6 +194,8 @@ def run_menu_show():
             run_export_interactive()
         elif user_input == '2':
             show_export_status()
+        elif user_input == 'h':
+            help_mgr.show_help("export")
         elif user_input.startswith("export"):
             run_export_cli(user_input)
         else:

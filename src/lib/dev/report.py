@@ -9,7 +9,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib import font_manager
 
-from lib.system import ui, config_mgr, logger_mgr
+from lib.system import ui, config_mgr, logger_mgr, help_mgr
 from lib.common import helpers
 from lib.db import sqlite_mgr
 
@@ -410,7 +410,7 @@ def run_menu_show():
         ui.draw_line("─")
         print("  p. 이전 메뉴로 돌아가기 (상위 메뉴)\n")
 
-        print(f"{ui.HL}  [ CLI 직접 입력 예시 ]{ui.FG}")
+        print(f"{ui.HL}  [ CLI 입력 (H : 도움말) ]{ui.FG}")
         print("  report [--date-from YYYY-MM-DD] [--date-to YYYY-MM-DD] [--format console|txt|md]")
         print("  (입력 예: report --format md --date-from 2026-08-01 --date-to 2026-08-07)")
 
@@ -419,6 +419,8 @@ def run_menu_show():
 
         if choice == 'p':
             break
+        elif choice == 'h':
+            help_mgr.show_help("report")
         elif choice == '1':
             date_range = _prompt_optional_date_range()
             if date_range is not None:

@@ -19,7 +19,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 from lib.db import raw_store
-from lib.system import config_mgr, ui, logger_mgr
+from lib.system import config_mgr, ui, logger_mgr, help_mgr
 
 logger = logger_mgr.get_logger(__name__)
 
@@ -414,14 +414,15 @@ def run_menu_show():
                 print(f"  {idx}. {ui.HL}{name}{ui.FG}\n     ├─ [방식] {ui.HL}{method:<5}{ui.FG} │  [카테고리] {category:<6} │  [상태] {status}\n     └─ [URI ] {uri}")
         ui.draw_line("─")
         print(f"\n{ui.HL}  [ 대화형 메뉴 ]{ui.FG}\n  1. 뉴스 수집 실행\n  2. 수집 현황 확인\n")
-        print(f"{ui.HL}  [ CLI ]{ui.FG} fetch --source [소스명|all] [--limit 20]\n")
-        print(f"  {ui.FG}💡 번호 선택 또는 CLI 명령어 입력  |  {ui.HL}[P]{ui.FG} 상위 메뉴")
+        print(f"{ui.HL}  [ CLI 입력 (H : 도움말) ]{ui.FG} fetch --source [소스명|all] [--limit 20]\n")
+        print(f"  {ui.FG}💡 번호 선택 또는 CLI 명령어 입력  |  {ui.HL}P{ui.FG} : 상위 메뉴")
         ui.draw_line("─")
 
         user_input = input(f"{ui.HL} Codyssey/fetch > {ui.FG}").strip()
         
         if not user_input: continue
         if user_input.lower() == 'p': break
+        elif user_input.lower() == 'h': help_mgr.show_help("fetch")
         elif user_input == '1': run_fetch_interactive()
         elif user_input == '2': show_data_status()
         elif user_input.startswith("fetch"): run_fetch_cli(user_input)

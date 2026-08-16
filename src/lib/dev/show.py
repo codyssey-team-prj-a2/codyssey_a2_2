@@ -2,7 +2,7 @@
 import argparse
 import shlex
 
-from lib.system import ui, logger_mgr
+from lib.system import ui, logger_mgr, help_mgr
 from lib.db import sqlite_mgr
 
 # [추가] 모듈 전용 로거 생성
@@ -119,7 +119,7 @@ def run_menu_show():
         print("  1. 상세 조회 실행 (번호 입력)")
         print("\n")
 
-        print(f"{ui.HL}  [ CLI 직접 입력 예시 ]{ui.FG}")
+        print(f"{ui.HL}  [ CLI 입력 (H : 도움말) ]{ui.FG}")
         print("  show --no [번호]")
         print("  (입력 예: show --no 10)")
 
@@ -131,6 +131,8 @@ def run_menu_show():
 
         if user_input.lower() == 'p':
             break
+        elif user_input.lower() == 'h':
+            help_mgr.show_help("show")
         elif user_input == '1':
             run_show_interactive()
         elif user_input.startswith("show"):

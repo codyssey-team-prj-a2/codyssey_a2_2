@@ -2,7 +2,7 @@
 import argparse
 import shlex
 
-from lib.system import ui, logger_mgr
+from lib.system import ui, logger_mgr, help_mgr
 from lib.db import sqlite_mgr
 from lib.dev import show  # 분리된 show 모듈 임포트
 
@@ -114,7 +114,7 @@ def run_board(page=1, size=10, category=None, date=None, keyword=None):
         items = print_news_board(result, curr_page, curr_size, curr_cat, curr_date, curr_kw)
         
         print(f" {ui.HL}[명령어]{ui.FG} N: 다음 | P: 이전 | F: 검색 | S: 건수 변경 | No: 상세조회 | Q: 메뉴로")
-        print(f" {ui.HL}[CLI]{ui.FG}   show --no 번호 : 상세조회 (show --no 10)")
+        print(f" {ui.HL}[CLI 입력 (H : 도움말)]{ui.FG}   show --no 번호 : 상세조회 (show --no 10)")
         
         ui.draw_line("─")
         cmd_raw = input(f"{ui.rl_color(ui.HL)} Codyssey/list | show > {ui.rl_color(ui.FG)}").strip()
@@ -122,6 +122,8 @@ def run_board(page=1, size=10, category=None, date=None, keyword=None):
         
         if cmd == 'q':
             break
+        elif cmd == 'h':
+            help_mgr.show_help("show")
         elif cmd == 'n':
             if curr_page < max(result.get('total_pages', 1), 1):
                 curr_page += 1
@@ -226,7 +228,7 @@ def run_menu_show():
         print("  P. 상위 메뉴로 돌아가기")
         print("\n")
 
-        print(f"{ui.HL}  [ CLI 직접 입력 예시 ]{ui.FG}")
+        print(f"{ui.HL}  [ CLI 입력 (H : 도움말) ]{ui.FG}")
         print("  list [--page 번호] [--size 건수] [--category 카테고리] [--date YYYY-MM-DD] [--keyword 단어]")
         print("  (입력 예: list -p 1 -s 10 -c IT --keyword 애플)")
 
@@ -240,6 +242,8 @@ def run_menu_show():
             break
         elif user_input == '1':
             run_board() 
+        elif user_input == 'h':
+            help_mgr.show_help("list")
         elif user_input.startswith("list"):
             run_list_cli(user_input)
         else:

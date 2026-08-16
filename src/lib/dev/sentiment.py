@@ -3,7 +3,7 @@ import argparse
 import json
 import shlex
 
-from lib.system import ui, logger_mgr
+from lib.system import ui, logger_mgr, help_mgr
 from lib.common import helpers, ai_client
 from lib.db import sqlite_mgr
 
@@ -130,7 +130,7 @@ def run_menu_show():
         print("  2. 전체 뉴스 감성 분석 실행")
         print("  p. 이전 메뉴로 돌아가기 (상위 메뉴)\n")
 
-        print(f"{ui.HL}  [ CLI 직접 입력 예시 ]{ui.FG}")
+        print(f"{ui.HL}  [ CLI 입력 (H : 도움말) ]{ui.FG}")
         print("  sentiment [--unanalyzed|--all] [--id news_id] [--limit 건수]")
         print("  (입력 예: sentiment --all --limit 20)")
 
@@ -142,6 +142,8 @@ def run_menu_show():
 
         if user_input.lower() == 'p':
             break
+        elif user_input.lower() == 'h':
+            help_mgr.show_help("sentiment")
         elif user_input == '1':
             run_sentiment_analysis("unanalyzed", limit=10)
         elif user_input == '2':

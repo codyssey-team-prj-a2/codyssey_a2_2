@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 
 from bs4 import BeautifulSoup
-from lib.system import ui, config_mgr, logger_mgr
+from lib.system import ui, config_mgr, logger_mgr, help_mgr
 from lib.db import raw_store
 from lib.db import sqlite_mgr as db
 
@@ -144,13 +144,14 @@ def run_menu_show():
         ui.draw_header(" 데이터 정제 (Clean) 제어소 ")
         print(f"{ui.FG}  아래 메뉴 번호를 선택하거나, CLI 명령어를 직접 입력하여 실행할 수 있습니다.\n")
         print(f"{ui.HL}  [ 대화형 메뉴 ]{ui.FG}\n  1. 정제 미리보기 (DB 저장 안 함)\n  2. 정제 실행 및 DB 저장 (skip/upsert 정책 적용)\n  p. 이전 메뉴로 돌아가기\n")
-        print(f"{ui.HL}  [ CLI 직접 입력 ]{ui.FG}\n  clean --policy [skip|upsert]\n")
+        print(f"{ui.HL}  [ CLI 입력 (H : 도움말) ]{ui.FG}\n  clean --policy [skip|upsert]\n")
         print("-" * w)
 
         user_input = input(f"\n{ui.HL}Codyssey/clean > {ui.FG}").strip()
 
         if not user_input: continue
         if user_input.lower() == 'p': break
+        elif user_input == 'h': help_mgr.show_help("clean")
         elif user_input == '1': run_clean_preview()
         elif user_input == '2': run_clean()
         elif user_input.startswith("clean"): run_clean_cli(user_input)

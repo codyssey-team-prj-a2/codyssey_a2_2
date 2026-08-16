@@ -2,7 +2,7 @@
 import shlex
 import argparse
 
-from lib.system import ui, logger_mgr
+from lib.system import ui, logger_mgr, help_mgr
 from lib.common import ai_client
 from lib.db import sqlite_mgr as db
 
@@ -147,7 +147,7 @@ def run_menu_show():
         print("  3. 전체 뉴스 일괄 요약 (--all, 이미 요약된 기사는 스킵됨)")
         print("  p. 이전 메뉴로 돌아가기 (상위 메뉴)\n")
 
-        print(f"{ui.HL}  [ CLI 직접 입력 예시 ]{ui.FG}")
+        print(f"{ui.HL}  [ CLI 입력 (H : 도움말) ]{ui.FG}")
         print("  summarize [--unsummarized | --all | --id 뉴스번호] [--limit 숫자]")
         print("  (입력 예 1: summarize --unsummarized --limit 20)")
         print("  (입력 예 2: summarize --id 42)  ※ id는 list(5번 메뉴)의 No 활용")
@@ -162,6 +162,7 @@ def run_menu_show():
             break
         elif user_input == '1':
             run_summarize_preview()
+        elif user_input == 'h': help_mgr.show_help("summarize")
         elif user_input == '2':
             run_summarize_action(target="unsummarized", limit=10)
         elif user_input == '3':
