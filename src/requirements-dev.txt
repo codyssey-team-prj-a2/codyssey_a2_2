@@ -1,2 +1,3 @@
 ruff
 import-linter
+selenium

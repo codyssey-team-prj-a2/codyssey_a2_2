@@ -397,13 +397,17 @@ def run_menu_show():
         print(f"{ui.FG}  matplotlib 기반 차트를 생성하여 PNG 파일로 저장합니다.\n")
 
         print(f"{ui.HL}  [ 메뉴 ]{ui.FG}")
-        print("  1. 카테고리별 뉴스 건수 차트 생성")
+
+        print("\n  1. 카테고리별 뉴스 건수 차트 생성")
         print("  2. 일자별 뉴스 수집 추이 차트 생성")
-        print("  3. 전체 차트 일괄 생성")
-        print("  4. 품질 지표 조회 (정제 통과율, AI 요약 성공률)")
-        print("  5. TOP N 집계 조회 (핵심 키워드 TOP5, 카테고리 TOP3)")
-        print("  6. 종합 리포트 생성 (대화형 파라미터 입력)")
-        print("  7. 감성 분포 차트 생성 [보너스]")
+        print("  3. 감성 분포 차트 생성")
+        print("  4. 전체 차트 일괄 생성")
+        ui.draw_line("─")
+        print("  5. 품질 지표 조회 (정제 통과율, AI 요약 성공률)")
+        print("  6. TOP N 집계 조회 (핵심 키워드 TOP5, 카테고리 TOP3)")
+        ui.draw_line("─")
+        print("  7. 종합 리포트 생성 (대화형 파라미터 입력)")
+        ui.draw_line("─")
         print("  p. 이전 메뉴로 돌아가기 (상위 메뉴)\n")
 
         print(f"{ui.HL}  [ CLI 직접 입력 예시 ]{ui.FG}")
@@ -426,6 +430,10 @@ def run_menu_show():
         elif choice == '3':
             date_range = _prompt_optional_date_range()
             if date_range is not None:
+                _generate_and_report(chart_sentiment_distribution, "감성 분포 차트", *date_range)
+        elif choice == '4':
+            date_range = _prompt_optional_date_range()
+            if date_range is not None:
                 date_from, date_to = date_range
                 try:
                     paths = [chart_category_distribution(date_from, date_to),
@@ -439,20 +447,16 @@ def run_menu_show():
                     logger.error(f"전체 시각화 차트 일괄 생성 중 오류 발생: {e}")
                     print(f"\n{ui.ERR}[오류] 차트 생성 중 문제가 발생했습니다: {e}{ui.FG}")
                 ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
-        elif choice == '4':
-            date_range = _prompt_optional_date_range()
-            if date_range is not None:
-                show_quality_metrics(*date_range)
         elif choice == '5':
             date_range = _prompt_optional_date_range()
             if date_range is not None:
-                show_top_n(*date_range)
+                show_quality_metrics(*date_range)
         elif choice == '6':
-            run_report_interactive()
-        elif choice == '7':
             date_range = _prompt_optional_date_range()
             if date_range is not None:
-                _generate_and_report(chart_sentiment_distribution, "감성 분포 차트", *date_range)
+                show_top_n(*date_range)
+        elif choice == '7':
+            run_report_interactive()
         elif choice.startswith("report"):
             run_report_cli(choice)
         else:

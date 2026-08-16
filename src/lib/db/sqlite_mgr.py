@@ -325,7 +325,7 @@ def get_news_list(page=1, size=10, category=None, date=None, keyword=None):
                 f"""
                 SELECT rowid as idx, news_id, source, category, title, pub_date, is_summarized, content, ai_summary, sentiment, sentiment_reason, created_at
                 FROM clean_news{where_clause}
-                ORDER BY pub_date DESC, rowid DESC
+                ORDER BY created_at DESC, rowid DESC
                 LIMIT ? OFFSET ?
                 """,
                 params + [size, offset],

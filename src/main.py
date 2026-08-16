@@ -14,10 +14,10 @@ MODULE_MAP = {
     '1': fetch.run_menu_show,
     '2': clean.run_menu_show,
     '3': summarize.run_menu_show,
-    '4': analyze.run_menu_show,
+    '4': sentiment.run_menu_show,
     '5': list_news.run_menu_show,
-    '6': report.run_menu_show,
-    '7': sentiment.run_menu_show,
+    '6': analyze.run_menu_show,
+    '7': report.run_menu_show,
     '8': export.run_menu_show,
 }
 
@@ -53,14 +53,15 @@ def run_tui():
         print("  1. 뉴스 수집 (fetch)")
         print("  2. 데이터 정제 (clean)")
         print("  3. AI 3줄 요약 (summarize)")
-        print("  4. AI 종합 인사이트 분석 (analyze)")
+        print("  4. AI 감성 분석 (sentiment)")
 
         ui.draw_line("─")
         
         # 5. 7~9번 보너스 기능 메뉴
         print("  5. 뉴스 목록 조회 (list)")
-        print("  6. 품질 지표 및 시각화 차트 출력 (report)")
-        print("  7. AI 감성 분석 (sentiment)")
+        ui.draw_line("─")
+        print("  6. AI 종합 인사이트 분석 (analyze)")
+        print("  7. 품질 지표 및 시각화 차트 출력 (report)")
 
         ui.draw_line("─")
         print("  8. 데이터 내보내기 (export)")

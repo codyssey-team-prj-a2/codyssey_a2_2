@@ -2,399 +2,492 @@
 import argparse
 import re
 import shlex
+import time
 from datetime import datetime, timezone
+from urllib.parse import urljoin, urlparse
+from urllib.robotparser import RobotFileParser
 
 import feedparser
 import requests
 from bs4 import BeautifulSoup
 
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service 
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
 from lib.db import raw_store
 from lib.system import config_mgr, ui, logger_mgr
 
-# [추가] 모듈 전용 로거 생성
 logger = logger_mgr.get_logger(__name__)
 
-# CLI 명령어를 코드 내부에서 파싱하기 위한 전용 파서 설정
 fetch_parser = argparse.ArgumentParser(prog="fetch", add_help=False)
 fetch_parser.add_argument("--source", type=str, required=True)
 fetch_parser.add_argument("--limit", type=str, default="20")
 
-USER_AGENT = "codyssey-news-pipeline/0.1 (edu project)"
+# [원칙 4] 투명한 User-Agent 설정 (개인 연구 및 수집 봇 명시)
+USER_AGENT = "CodysseyNewsBot/1.0 (Personal Research & News Aggregator Project)"
 DEFAULT_TIMEOUT_SEC = 10
+
+# [원칙 1] 도메인별 robots.txt 파서 캐시 (중복 다운로드 방지)
+_robot_cache = {}
+
+def _is_allowed_by_robots(url, user_agent="*"):
+    """대상 URL이 robots.txt 정책에 따라 크롤링이 허용되는지 확인한다."""
+    try:
+        parsed = urlparse(url)
+        domain = f"{parsed.scheme}://{parsed.netloc}"
+        
+        if domain not in _robot_cache:
+            rp = RobotFileParser()
+            rp.set_url(f"{domain}/robots.txt")
+            try:
+                rp.read()
+            except Exception:
+                # robots.txt가 없거나 접근 불가한 경우 기본 허용(Allow) 처리
+                pass
+            _robot_cache[domain] = rp
+            
+        # '*' 또는 특정 봇 이름으로 허용 여부 판정
+        return _robot_cache[domain].can_fetch(user_agent, url)
+    except Exception:
+        # 파싱 중 예외 발생 시 안전하게 허용 처리
+        return True
 
 
 def _now_iso():
-    return datetime.now(timezone.utc).isoformat()
-
+    return datetime.now().astimezone().isoformat()
 
 def _resolve_sources(source_name):
-    """config.json의 news_sources 중 이름이 일치하는(또는 all이면 전체) 소스 목록을 돌려준다."""
     sources = config_mgr.load_config().get("news_sources", [])
     sources = [s for s in sources if s.get("name")]
-    if source_name == "all":
-        return sources
+    if source_name == "all": return sources
     return [s for s in sources if s.get("name") == source_name]
 
+def _create_driver():
+    options = Options()
+    options.binary_location = "/usr/bin/chromium"
+    options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920,1080")
+    options.add_argument(f"user-agent={USER_AGENT}")
+    options.add_argument('--blink-settings=imagesEnabled=false')
+    service = Service("/usr/bin/chromedriver")
+    return webdriver.Chrome(service=service, options=options)
 
-def fetch_via_rss(source, timeout=DEFAULT_TIMEOUT_SEC):
-    """RSS 피드 XML을 요청/파싱해서 뉴스 항목을 추출한다."""
+def _extract_article_text(driver, url, timeout):
+    """Selenium을 통해 외부 기사 페이지에 접속하여 순수 본문 텍스트를 심층 추출합니다."""
+    # [원칙 1] 크롤링 전 robots.txt 준수 여부 엄격 검증
+    if not _is_allowed_by_robots(url):
+        logger.warning(f"robots.txt 정책에 의해 수집이 차단된 URL입니다: {url}")
+        return "", url
+
+    try:
+        driver.set_page_load_timeout(timeout)
+        driver.get(url)
+        time.sleep(1.5)
+        
+        html = driver.page_source
+        if "http-equiv=\"refresh\"" in html.lower() or "http-equiv='refresh'" in html.lower():
+            soup = BeautifulSoup(html, "html.parser")
+            meta_refresh = soup.find("meta", attrs={"http-equiv": lambda x: x and x.lower() == "refresh"})
+            if meta_refresh:
+                match = re.search(r'url=([^;]+)', meta_refresh.get("content", ""), re.I)
+                if match:
+                    real_url = match.group(1).strip("'\" ")
+                    if not real_url.startswith("http"): real_url = urljoin(url, real_url)
+                    
+                    # 리다이렉트된 주소도 robots.txt 검증
+                    if not _is_allowed_by_robots(real_url):
+                        return "", url
+                        
+                    driver.get(real_url)
+                    time.sleep(1.5)
+                    html = driver.page_source
+
+        final_url = driver.current_url
+        soup = BeautifulSoup(html, "html.parser")
+                
+        for tag in soup(["script", "style", "header", "footer", "nav", "aside", "form", "iframe"]):
+            tag.decompose()
+            
+        patterns = re.compile(r'(dic_area|newsct_article|article.*view|body.*area|articeBody|articleBody|mw-parser-output|news_txt|content_area|story-content|post-content)', re.I)
+        main_content = soup.find(id=patterns) or soup.find(["div", "article", "section"], class_=patterns)
+            
+        if main_content:
+            paragraphs = main_content.find_all("p")
+            if paragraphs:
+                valid_texts = [p.get_text(separator=" ", strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 10]
+                text = " ".join(valid_texts).strip()
+                if len(text) > 50: return text, final_url
+            text = main_content.get_text(separator=" ", strip=True)
+            if len(text) > 50: return text, final_url
+
+        paragraphs = soup.find_all("p")
+        valid_texts = [p.get_text(separator=" ", strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 20]
+        extracted = " ".join(valid_texts).strip()
+        
+        if len(extracted) > 50: return extracted, final_url
+        return "", final_url
+    except Exception as e:
+        logger.debug(f"본문 추출 실패 ({url}): {e}")
+        return "", url
+
+def fetch_via_rss(source, limit=20, timeout=DEFAULT_TIMEOUT_SEC):
     uri = source.get("uri") or source.get("url") or ""
-    if not uri:
-        return [], "등록된 URI가 없습니다."
+    if not uri: return [], "등록된 URI가 없습니다."
 
     try:
         resp = requests.get(uri, timeout=timeout, headers={"User-Agent": USER_AGENT})
         resp.raise_for_status()
-    except requests.Timeout:
-        return [], f"요청 시간 초과({timeout}초)"
-    except requests.RequestException as e:
-        return [], f"요청 실패: {e}"
+    except Exception as e:
+        return [], "서버 응답 오류 (네트워크 지연/거부)"
 
     feed = feedparser.parse(resp.content)
-    if feed.bozo and not feed.entries:
-        return [], f"RSS 파싱 실패: {feed.bozo_exception}"
+    if feed.bozo and not feed.entries: return [], "RSS 파싱 실패"
 
     records = []
-    for entry in feed.entries:
-        title = entry.get("title", "").strip()
-        if not title:
+    driver = None
+    count = 1
+    
+    try:
+        for entry in feed.entries:
+            if len(records) >= limit: break
+            title = entry.get("title", "").strip()
+            if not title: continue
+            
+            link_url = entry.get("link", "")
+            raw_summary = entry.get("summary", "")
+            clean_summary = BeautifulSoup(raw_summary, "html.parser").get_text(separator=" ", strip=True)
+            
+            full_content = ""
+            final_url = link_url
+            
+            if link_url:
+                if not driver:
+                    try: driver = _create_driver()
+                    except Exception as e: return records, "Selenium 브라우저 구동 실패"
+                
+                print(f"    [{count}/{limit}] {title[:30]}... 수집 중", end="", flush=True)
+                full_content, resolved_url = _extract_article_text(driver, link_url, timeout)
+                if resolved_url: final_url = resolved_url
+                print(f"\r    [{count}/{limit}] {title[:30]}... 완료!      ")
+                count += 1
+                
+            final_content = full_content if len(full_content) > len(clean_summary) else clean_summary
+            if not final_content: final_content = title
+
+            records.append({
+                "source_name": source.get("name", ""),
+                "method": "rss",
+                "category": source.get("category", "종합"),
+                "title": title,
+                "content": final_content,
+                "url": final_url,
+                "published_at": entry.get("published", None),
+                "collected_at": _now_iso(),
+            })
+    finally:
+        if driver:
+            try: driver.quit()
+            except Exception: pass
+    return records, None
+
+
+def fetch_via_api(source, limit=20, timeout=DEFAULT_TIMEOUT_SEC):
+    base_uri = source.get("uri") or source.get("url") or ""
+    if not base_uri: return [], "등록된 URI가 없습니다."
+
+    base_uri = base_uri.rstrip("/")
+
+    try:
+        session = requests.Session()
+        session.headers.update({"User-Agent": USER_AGENT})
+
+        resp = session.get(f"{base_uri}/topstories.json", timeout=timeout)
+        resp.raise_for_status()
+        story_ids = resp.json()[:limit]
+    except Exception as e:
+        logger.error(f"[{source.get('name')}] API 스토리 목록 조회 실패: {e}")
+        return [], "API 서버 연결 실패"
+
+    records = []
+    driver = None
+    count = 1
+    
+    for s_id in story_ids:
+        try:
+            item_resp = session.get(f"{base_uri}/item/{s_id}.json", timeout=timeout)
+            if item_resp.status_code != 200: continue
+            item = item_resp.json()
+            
+            if not item or not item.get("title"): continue
+
+            title = item.get("title").strip()
+            print(f"    [{count}/{limit}] {title[:30]}... 수집 중", end="", flush=True)
+
+            external_url = item.get("url")
+            raw_text = item.get("text", "")
+            
+            content = ""
+            final_url = external_url
+
+            if external_url:
+                if not driver:
+                    try: driver = _create_driver()
+                    except Exception: pass
+                
+                if driver:
+                    full_content, resolved_url = _extract_article_text(driver, external_url, timeout)
+                    if resolved_url: final_url = resolved_url
+                    if full_content: content = full_content
+
+            if not content and raw_text:
+                content = BeautifulSoup(raw_text, "html.parser").get_text(separator=" ", strip=True)
+
+            if not content: content = title
+            if not final_url: final_url = f"https://news.ycombinator.com/item?id={s_id}"
+
+            pub_time = item.get("time")
+            pub_date = datetime.fromtimestamp(pub_time, tz=timezone.utc).isoformat() if pub_time else None
+
+            records.append({
+                "source_name": source.get("name", ""),
+                "method": "api",
+                "category": source.get("category", "IT"),
+                "title": title,
+                "content": content,
+                "url": final_url,
+                "published_at": pub_date,
+                "collected_at": _now_iso(),
+            })
+            print(f"\r    [{count}/{limit}] {title[:30]}... 완료!      ")
+            count += 1
+        except Exception as e:
+            logger.error(f"해커뉴스 아이템({s_id}) 파싱 오류: {e}")
             continue
-        records.append({
-            "source_name": source.get("name", ""),
-            "method": "rss",
-            "category": source.get("category", "종합"),
-            "title": title,
-            "content": entry.get("summary", title),
-            "url": entry.get("link", ""),
-            "published_at": entry.get("published", None),
-            "collected_at": _now_iso(),
-        })
+
+    if driver:
+        try: driver.quit()
+        except Exception: pass
+
+    if not records: return [], "수집된 API 데이터가 없습니다."
     return records, None
 
 
 _RELATIVE_DATE_RE = re.compile(r"(\d{1,2})월\s*(\d{1,2})일")
 
-
 def _parse_relative_date(text):
     m = _RELATIVE_DATE_RE.search(text)
-    if not m:
-        return None
+    if not m: return None
     month, day = int(m.group(1)), int(m.group(2))
-    year = datetime.now(timezone.utc).year
-    try:
-        return datetime(year, month, day, tzinfo=timezone.utc).isoformat()
-    except ValueError:
-        return None
+    local_now = datetime.now().astimezone()
+    try: return local_now.replace(month=month, day=day, hour=0, minute=0, second=0, microsecond=0).isoformat()
+    except ValueError: return None
 
-
-def fetch_via_crawl(source, timeout=DEFAULT_TIMEOUT_SEC):
-    """크롤링 방식으로 뉴스 항목을 추출한다."""
+def fetch_via_crawl(source, limit=20, timeout=DEFAULT_TIMEOUT_SEC):
     uri = source.get("uri") or source.get("url") or ""
-    if not uri:
-        return [], "등록된 URI가 없습니다."
+    if not uri: return [], "등록된 URI가 없습니다."
 
+    driver = None
     try:
-        resp = requests.get(uri, timeout=timeout, headers={"User-Agent": USER_AGENT})
-        resp.raise_for_status()
-    except requests.Timeout:
-        return [], f"요청 시간 초과({timeout}초)"
-    except requests.RequestException as e:
-        return [], f"요청 실패: {e}"
+        try: driver = _create_driver()
+        except Exception: return [], "Selenium 브라우저 구동 실패"
+        try:
+            driver.set_page_load_timeout(timeout)
+            driver.get(uri)
+            WebDriverWait(driver, timeout).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+            html = driver.page_source
+        except Exception: return [], "메인 페이지 연결 실패"
 
-    soup = BeautifulSoup(resp.text, "html.parser")
-    content_div = soup.select_one("div.mw-parser-output")
-    if not content_div:
-        return [], "콘텐츠 영역(div.mw-parser-output)을 찾지 못했습니다."
-
-    records = []
-    for li in content_div.find_all("li"):
-        bold_link = li.select_one("b a")
-        if bold_link:
-            title = bold_link.get_text(strip=True)
-            link_url = bold_link.get("href", uri)
-        else:
-            first_link = li.find("a")
-            title = li.get_text(" ", strip=True)[:80]
-            link_url = first_link.get("href", uri) if first_link else uri
-
-        text = li.get_text(" ", strip=True)
-        if not title or not text:
-            continue
-
-        records.append({
-            "source_name": source.get("name", ""),
-            "method": "crawl",
-            "category": source.get("category", "종합"),
-            "title": title,
-            "content": text,
-            "url": link_url,
-            "published_at": _parse_relative_date(text),
-            "collected_at": _now_iso(),
-        })
+        soup = BeautifulSoup(html, "html.parser")
+        links = soup.find_all("a", href=True)
+        records = []
+        seen_urls = set()
+        count = 1
+        
+        for a in links:
+            if len(records) >= limit: break
+            title = a.get_text(strip=True)
+            if len(title) < 15: continue
+            raw_href = a['href']
+            if raw_href.startswith("javascript") or raw_href.startswith("#"): continue
+            
+            link_url = urljoin(uri, raw_href)
+            if link_url in seen_urls: continue
+            seen_urls.add(link_url)
+            
+            print(f"    [{count}/{limit}] {title[:30]}... 수집 중", end="", flush=True)
+            full_content, resolved_url = _extract_article_text(driver, link_url, timeout)
+            print(f"\r    [{count}/{limit}] {title[:30]}... 완료!      ")
+            count += 1
+            
+            records.append({
+                "source_name": source.get("name", ""),
+                "method": "crawl",
+                "category": source.get("category", "종합"),
+                "title": title,
+                "content": full_content,
+                "url": resolved_url if resolved_url else link_url,
+                "published_at": _parse_relative_date(title),
+                "collected_at": _now_iso(),
+            })
+    finally:
+        if driver:
+            try: driver.quit()
+            except Exception: pass
     return records, None
 
-
-FETCH_HANDLERS = {"rss": fetch_via_rss, "crawl": fetch_via_crawl}
-
+FETCH_HANDLERS = {
+    "rss": fetch_via_rss,
+    "crawl": fetch_via_crawl,
+    "api": fetch_via_api
+}
 
 def execute_fetch_logic(source, limit, is_cli=False):
-    """수집 실행 결과 화면 출력 및 로그 기록"""
     print()
     ui.draw_line("━")
     mode_text = "[CLI 모드]" if is_cli else "[대화형 모드]"
-    
-    # [로그 추가] 전체 수집 파이프라인 시작
     logger.info(f"뉴스 수집 파이프라인 시작 (소스: {source}, 최대 제한: {limit}건, 모드: {mode_text})")
     
     print(f"{ui.HL}>> {mode_text} 뉴스 데이터 수집을 시작합니다...{ui.FG}")
-    print(f"   (적용 옵션: source={source}, limit={limit})\n")
+    print(f"   (적용 옵션: source={source}, limit={limit})\n   💡 안내: robots.txt 정책 검증 및 본문 심층 추출을 진행합니다.")
 
     targets = _resolve_sources(source)
     if not targets:
-        # [로그 추가] 등록되지 않은 소스를 요청한 에러 상황
-        logger.error(f"등록되지 않은 소스 '{source}'를 요청하여 수집을 중단합니다.")
         print(f"{ui.ERR}'{source}' 이름의 등록된 소스를 찾을 수 없습니다.{ui.FG}")
-        ui.draw_line("━")
         ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
         return
 
     try:
         limit_int = int(limit)
-        if limit_int <= 0:
-            raise ValueError
+        if limit_int <= 0: raise ValueError
     except (TypeError, ValueError):
-        # [로그 추가] 파라미터가 잘못되어 강제로 기본값을 쓴 상황을 관리자에게 경고
-        logger.warning(f"잘못된 수집 제한 건수 입력('{limit}'). 기본값(20건)으로 보정되어 진행됩니다.")
         print(f"{ui.ERR}[오류] 올바른 수집 제한 건수(양의 정수)가 아니므로 기본값 20건을 적용합니다.{ui.FG}")
         limit_int = 20
 
     timeout = config_mgr.load_config().get("fetch", {}).get("timeout_sec", DEFAULT_TIMEOUT_SEC)
-
-    total = 0
-    total_fail = 0
+    total, total_fail = 0, 0
+    
     for src in targets:
         method = src.get("method", "rss")
         handler = FETCH_HANDLERS.get(method)
-        if handler is None:
-            # [로그 추가] 기능 미지원 건너뛰기
-            logger.warning(f"[{src.get('name')}] 지원하지 않는 수집 방식('{method}')이므로 건너뜁니다.")
-            print(f"  [건너뜀] {src.get('name')}: '{method}' 수집 방식은 아직 지원하지 않습니다.\n")
-            continue
+        if handler is None: continue
 
         print(f"  [수집 진행] {src.get('name')} ({method.upper()}) 데이터 요청 중...")
-        records, error = handler(src, timeout=timeout)
+        try: records, error = handler(src, limit=limit_int, timeout=timeout)
+        except Exception as e:
+            error = f"수집 모듈 내부 시스템 오류 발생: {e}"
+            records = []
+
         if error:
-            # [로그 추가] 개별 피드 통신 실패 (네트워크 등)
-            logger.error(f"[{src.get('name')}] 통신/파싱 실패: {error}")
             print(f"  {ui.ERR}[실패] {src.get('name')}: {error}{ui.FG}\n")
             total_fail += 1
             continue
 
-        records = records[:limit_int]
-        for r in records:
-            raw_store.append(src.get("name", ""), r)
-            print(f"    - {r['title']}")
-        
-        # [로그 추가] 개별 피드 수집 성공 통계
-        logger.info(f"[{src.get('name')}] 수집 완료 ({len(records)}건 적재)")
-        print(f"  └─ [{src.get('name')}] {len(records)}건 추출 및 raw 저장 완료\n")
+        for r in records: raw_store.append(src.get("name", ""), r)
+        print(f"  └─ [{src.get('name')}] {len(records)}건 수집 및 적재 완료\n")
         total += len(records)
 
     ui.draw_line("─")
-    # [로그 추가] 파이프라인 전체 완료 통계
-    logger.info(f"뉴스 수집 파이프라인 종료 (총 {total}건 추출 성공, {total_fail}개 소스 실패)")
     print(f"{ui.HL}>> 수집 작업이 완료되었습니다! (총 {total}건 추출, 실패 {total_fail}건){ui.FG}")
     ui.draw_line("━")
     ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
 
-# ... (아래 run_menu_show, run_fetch_cli, run_fetch_interactive, show_data_status 함수는 기존과 완전히 동일하므로 생략하지 않고 그대로 유지) ...
-
 def run_menu_show():
-    """메인 메뉴 루프"""
     while True:
         ui.clear_screen()
-        
-        # [1] 상단 헤더
         ui.draw_header(" 뉴스 데이터 수집 (Fetch) 제어소 ")
-        print(f"{ui.FG}  등록된 뉴스 피드를 조회하고 데이터 수집 파이프라인을 실행합니다.\n")
-        
-        # [2] 등록된 뉴스 피드 현황 (5번 수정사항: 구분감 및 가독성 극대화)
         config = config_mgr.load_config()
         sources = config.get("news_sources", [])
         
         ui.draw_line("─")
         print(f"{ui.HL}  [ 현재 등록된 뉴스 피드 현황 ]{ui.FG}")
-        if not sources:
-            print("  (등록된 뉴스 소스가 없습니다. 환경 설정 메뉴에서 먼저 등록해주세요.)")
+        if not sources: print("  (등록된 뉴스 소스가 없습니다. 환경 설정 메뉴에서 먼저 등록해주세요.)")
         else:
             for idx, s in enumerate(sources, 1):
-                name = s.get("name", "이름없음")
-                method = (s.get("method") or "rss").upper()
-                uri = s.get("uri") or s.get("url") or "URI 없음"
-                category = s.get("category", "종합")
-                status = "활성" if s.get("enabled", True) else "비활성"
-                
-                print(f"  {idx}. {ui.HL}{name}{ui.FG}")
-                print(f"     ├─ [방식] {ui.HL}{method:<5}{ui.FG} │  [카테고리] {category:<6} │  [상태] {status}")
-                print(f"     └─ [URI ] {uri}")
+                name, method, uri, category, status = s.get("name", "이름없음"), (s.get("method") or "rss").upper(), s.get("uri") or s.get("url") or "URI 없음", s.get("category", "종합"), "활성" if s.get("enabled", True) else "비활성"
+                print(f"  {idx}. {ui.HL}{name}{ui.FG}\n     ├─ [방식] {ui.HL}{method:<5}{ui.FG} │  [카테고리] {category:<6} │  [상태] {status}\n     └─ [URI ] {uri}")
         ui.draw_line("─")
-        print()
-        
-        # [3] 대화형 메뉴 (1번 수정사항: 메뉴 번호 직관성 확보)
-        print(f"{ui.HL}  [ 대화형 메뉴 ]{ui.FG}")
-        print("  1. 뉴스 수집 실행 (등록 소스 목록 선택)")
-        print("  2. 현재 수집된 데이터 수 확인\n")
-        
-        # [1번 수정사항] CLI 직접 입력 가이드는 메뉴 하단 보조 안내문으로 이동
-        print(f"{ui.HL}  [ CLI 직접 입력 예시 ]{ui.FG}")
-        print(f"  fetch --source [소스명|all] [--limit 20]\n")
-
-        
-        print(f"\n  {ui.FG}💡 번호 선택 또는 CLI 명령어 직접 입력  |  {ui.HL}[P]{ui.FG} 상위 메뉴")
+        print(f"\n{ui.HL}  [ 대화형 메뉴 ]{ui.FG}\n  1. 뉴스 수집 실행\n  2. 수집 현황 확인\n")
+        print(f"{ui.HL}  [ CLI ]{ui.FG} fetch --source [소스명|all] [--limit 20]\n")
+        print(f"  {ui.FG}💡 번호 선택 또는 CLI 명령어 입력  |  {ui.HL}[P]{ui.FG} 상위 메뉴")
         ui.draw_line("─")
 
-        # [4] 명령어 입력 프롬프트 (3번/4번 수정사항 반영)
         user_input = input(f"{ui.HL} Codyssey/fetch > {ui.FG}").strip()
         
-        if not user_input:
-            continue
-            
-        if user_input.lower() == 'p':
-            break
-        elif user_input == '1':
-            run_fetch_interactive()
-        elif user_input == '2':
-            show_data_status()
-        elif user_input.startswith("fetch"):
-            run_fetch_cli(user_input)
+        if not user_input: continue
+        if user_input.lower() == 'p': break
+        elif user_input == '1': run_fetch_interactive()
+        elif user_input == '2': show_data_status()
+        elif user_input.startswith("fetch"): run_fetch_cli(user_input)
         else:
             print(f"\n{ui.ERR}올바르지 않은 명령어나 번호입니다.{ui.FG}")
             ui.pause("다시 시도하려면 [Enter]를 누르세요...")
 
-
 def run_fetch_cli(command_str):
-    """CLI 직접 입력 명령 파싱"""
     try:
         args_list = shlex.split(command_str)
         args, unknown = fetch_parser.parse_known_args(args_list[1:])
-        
-        if unknown:
-            print(f"\n알 수 없는 옵션이 포함되어 있습니다: {unknown}")
-            ui.pause("[Enter]를 눌러 돌아갑니다...")
-            return
-            
-        source = args.source
-        limit = args.limit
-        
-        execute_fetch_logic(source, limit, is_cli=True)
-        
-    except SystemExit:
-        print("\n[오류] 필수 파라미터가 누락되었습니다. '--source'를 반드시 포함하세요.")
-        ui.pause("[Enter]를 눌러 돌아갑니다...")
-    except Exception as e:
-        print(f"\n[오류] 명령어 파싱 중 에러 발생: {e}")
-        ui.pause("[Enter]를 눌러 돌아갑니다...")
-
+        if unknown: return
+        execute_fetch_logic(args.source, args.limit, is_cli=True)
+    except SystemExit: pass
+    except Exception: pass
 
 def run_fetch_interactive():
-    """1번 메뉴 선택 시: 등록된 소스 객관식 선택 & 제한 건수 입력 (2번/3번/4번 수정사항 적용)"""
     config = config_mgr.load_config()
     sources = config.get("news_sources", [])
-    
-    if not sources:
-        ui.clear_screen()
-        ui.draw_header(" 대화형 뉴스 수집 설정 ")
-        print(f"\n{ui.ERR}등록된 뉴스 소스가 없습니다. 환경 설정 메뉴에서 먼저 등록해주세요.{ui.FG}")
-        ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
-        return
-
-    # [1] 소스 선택 루프 (잘못된 입력 시 상위 메뉴로 안 튕기고 안내 후 재입력)
+    if not sources: return
     selected_source = None
     while True:
         ui.clear_screen()
         ui.draw_header(" 대화형 뉴스 수집 설정 ")
-        
-        print(f"{ui.HL}  [ 수집할 뉴스 소스 선택 ]{ui.FG}")
-        print("  0) 전체 수집 (all)")
+        print(f"{ui.HL}  [ 수집할 뉴스 소스 선택 ]{ui.FG}\n  0) 전체 수집 (all)")
         source_map = {"0": "all"}
-        
         for idx, s in enumerate(sources, 1):
             name = s.get("name", f"source_{idx}")
-            method = (s.get("method") or "rss").upper()
-            category = s.get("category", "종합")
-            print(f"  {idx}) {name} (방식: {method} / 카테고리: {category})")
+            print(f"  {idx}) {name} (방식: {(s.get('method') or 'rss').upper()} / 카테고리: {s.get('category', '종합')})")
             source_map[str(idx)] = name
-            
         print("\n C) 취소\n")
         ui.draw_line("─")
-        
-        sel = input(f"{ui.FG}▶ 수집할 소스 번호를 선택하세요 [C: 취소] > {ui.HL}").strip()
-        
-        # 3번/4번 반영: p, c, C 입력 시 취소하고 돌아가기
-        if sel.lower() in ['c']:
-            print(f"\n{ui.HL}>> 수집 설정을 취소하고 상위 메뉴로 돌아갑니다.{ui.FG}")
-            return
-            
+        sel = input(f"{ui.FG}▶ 번호 선택 [C: 취소] > {ui.HL}").strip()
+        if sel.lower() in ['c']: return
         if sel in source_map:
             selected_source = source_map[sel]
             break
-        else:
-            # 2번 반영: 상위 메뉴로 돌아가지 않고 재입력 요구
-            print(f"\n{ui.ERR}[오류] 잘못된 번호입니다. 등록된 소스 번호(0~{len(sources)})를 입력해 주세요.{ui.FG}")
-            ui.pause("다시 입력하려면 [Enter]를 누르세요...")
-
-    print(f"\n{ui.HL}>> 선택된 소스: [{selected_source}]{ui.FG}\n")
-
-    # [2] 수집 제한 건수 입력 루프 (2번/3번/4번 수정사항 적용)
+            
     limit_val = "20"
     while True:
         ui.draw_line("─")
-        limit_input = input(f"{ui.FG}▶ 수집 제한 건수 입력 [기본값: 20 (Enter)] [C: 취소] > {ui.HL}").strip()
-        
-        if limit_input.lower() in ['c']:
-            print(f"\n{ui.HL}>> 수집 설정을 취소하고 상위 메뉴로 돌아갑니다.{ui.FG}")
-            return
-            
-        if not limit_input:
-            limit_val = "20"
-            print(f"\n{ui.HL}>> 기본값 20건으로 설정하여 수집을 진행합니다.{ui.FG}")
-            break
-            
+        limit_input = input(f"{ui.FG}▶ 제한 건수 [기본 20] [C: 취소] > {ui.HL}").strip()
+        if limit_input.lower() in ['c']: return
+        if not limit_input: break
         if limit_input.isdigit() and int(limit_input) > 0:
             limit_val = limit_input
             break
-        else:
-            # 2번 반영: 숫자가 아닐 경우 안내 후 재입력
-            print(f"\n{ui.ERR}[오류] 올바른 수집 제한 건수(양의 정수)를 입력해 주세요.{ui.FG}")
-            ui.pause("다시 입력하려면 [Enter]를 누르세요...")
 
     execute_fetch_logic(selected_source, limit_val, is_cli=False)
 
-
 def show_data_status():
-    """현재 수집된 Raw 데이터 상태 출력"""
     ui.clear_screen()
-    ui.draw_header(" 현재 수집 데이터 보관 현황 ")
-    
+    ui.draw_header(" 수집 데이터 현황 ")
     sources = raw_store.list_sources()
-    if not sources:
-        print("\n  아직 수집된 raw 데이터가 없습니다.")
+    if not sources: print("\n  데이터가 없습니다.")
     else:
-        total = 0
-        latest = None
+        total, latest = 0, None
         print()
         for name in sources:
             records = raw_store.read_all(name)
             total += len(records)
             for r in records:
-                collected_at = r.get("collected_at")
-                if collected_at and (latest is None or collected_at > latest):
-                    latest = collected_at
-            print(f"  • {name}.jsonl  : {len(records)}건 보관 중")
-            
+                if r.get("collected_at") and (latest is None or r.get("collected_at") > latest):
+                    latest = r.get("collected_at")
+            print(f"  • {name}.jsonl  : {len(records)}건")
         ui.draw_line("─")
-        print(f"  * 전체 수집 데이터 수 : {total}건")
-        print(f"  * 최근 수집 완료 시각 : {latest or '알 수 없음'}")
-        
+        print(f"  * 총합 : {total}건\n  * 최근 : {latest or '알 수 없음'}")
     ui.draw_line("━")
     ui.pause("\n[Enter]를 눌러 서브메뉴로 돌아갑니다...")

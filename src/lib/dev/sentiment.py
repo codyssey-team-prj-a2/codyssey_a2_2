@@ -122,7 +122,7 @@ def run_menu_show():
         ui.clear_screen()
         w = ui.get_width()
 
-        ui.draw_header(" AI 감성 분석 (Sentiment) [보너스] 제어소 ")
+        ui.draw_header(" AI 감성 분석 (Sentiment) 제어소 ")
         print(f"{ui.FG}  뉴스 제목/요약을 AI로 분석해 긍정/부정/중립으로 분류합니다.\n")
 
         print(f"{ui.HL}  [ 대화형 메뉴 ]{ui.FG}")

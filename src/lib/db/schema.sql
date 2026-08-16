@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS clean_news (
     is_summarized INTEGER DEFAULT 0,    -- 요약 완료 여부 (0: 안됨, 1: 완료) [--unsummarized 필터링용]
     sentiment TEXT,                     -- AI가 분석한 감정 (긍정, 부정, 중립)
     sentiment_reason TEXT,              -- 감정 분석 근거 문장 (최대 200자)
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP -- DB 저장 시각
+    created_at TEXT DEFAULT (datetime('now', 'localtime')) -- DB 저장 시각
 );
 
 -- 검색 속도 향상을 위한 인덱스 생성
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS ai_insight (
     core_keywords TEXT NOT NULL,                  -- 콤마(,)로 구분된 핵심 키워드 목록
     implications TEXT NOT NULL,                   -- 비즈니스 시사점 및 공통/차이점
     
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,    -- 분석 수행 시각
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),    -- 분석 수행 시각
     
     -- 동일 기간, 동일 카테고리에 대한 중복 분석 결과 방지
     UNIQUE(target_category, period_from, period_to)
