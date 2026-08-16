@@ -6,12 +6,14 @@ from lib.system import ui, logger_mgr
 from lib.common import ai_client
 from lib.db import sqlite_mgr as db
 
-# [추가] 모듈 전용 로거 생성
+# 모듈 전용 로거 생성
 logger = logger_mgr.get_logger(__name__)
 
 summarize_parser = argparse.ArgumentParser(prog="summarize", add_help=False)
-summarize_parser.add_argument("--unsummarized", action="store_true")
-summarize_parser.add_argument("--limit", type=int, default=10)
+summarize_parser.add_argument("--unsummarized", "-u", action="store_true")
+summarize_parser.add_argument("--all", "-a", action="store_true")
+summarize_parser.add_argument("--id", "-i", type=str, default=None)
+summarize_parser.add_argument("--limit", "-l", type=int, default=10)
 
 SYSTEM_PROMPT = (
     "당신은 뉴스 에디터입니다. 아래 뉴스 본문을 읽고 핵심만 한국어로 3문장 이내, "
@@ -29,7 +31,6 @@ def summarize_one(title, content):
 def run_summarize_preview():
     """API 연동 확인용: 기사 하나를 직접 입력받아 요약 결과만 보여준다(아직 DB 반영 없음)."""
     if not ai_client.has_api_key():
-        # [로그 추가] 설정 누락 에러
         logger.error("AI API 키 미설정으로 요약 미리보기를 실행할 수 없습니다.")
         print(f"\n{ui.ERR}AI API 키가 설정되지 않았습니다. 환경 설정(1번)에서 먼저 등록하세요.{ui.FG}")
         ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
@@ -46,7 +47,6 @@ def run_summarize_preview():
     try:
         summary = summarize_one(title, content)
     except Exception as e:
-        # [로그 추가] 테스트 과정 중 발생한 AI 통신 오류
         logger.error(f"AI 요약 미리보기 중 통신/생성 오류 발생: {e}")
         print(f"\n{ui.ERR}[실패] AI 요약 중 오류: {e}{ui.FG}")
         ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
@@ -57,46 +57,79 @@ def run_summarize_preview():
     ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
 
 
-def run_summarize_unsummarized(limit=10):
-    """is_summarized=0인 기사를 최대 limit건 가져와 AI 요약하고 DB에 반영한다."""
+def run_summarize_action(target="unsummarized", news_id=None, limit=10):
+    """지정된 타겟(unsummarized, all, id)의 기사를 가져와 AI 요약하고 DB에 반영한다."""
     if not ai_client.has_api_key():
-        # [로그 추가] 백그라운드 등에서 인증 없이 파이프라인이 돌았을 때의 치명적 에러
         logger.error("AI API 키 미설정으로 일괄 요약 파이프라인이 중단되었습니다.")
         print(f"\n{ui.ERR}AI API 키가 설정되지 않았습니다. 환경 설정(1번)에서 먼저 등록하세요.{ui.FG}")
         ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
         return
 
     db.initialize_db()
-    rows = db.get_unsummarized_news(limit=limit)
-    if not rows:
-        # [로그 추가] 대기열이 비어있는 일반적인(정상적인) 상황
-        logger.info("대기 중인 미요약 기사가 없어 AI 3줄 요약 작업을 건너뜁니다.")
-        print(f"\n{ui.HL}요약할 미요약 기사가 없습니다.{ui.FG}")
+    rows = []
+
+    # DB에서 타겟에 맞는 데이터 가져오기
+    try:
+        if target == "id" and news_id:
+            if news_id.isdigit():
+                row = db.get_news_by_id(int(news_id))
+            else:
+                row = db.get_by_news_id(news_id)
+            if row:
+                rows.append(row)
+        elif target == "all":
+            with db.get_db_connection() as conn:
+                # [수정] 이전 코드의 idx 컬럼 에러를 방지하기 위해 범용적인 pub_date 로만 안전하게 정렬합니다.
+                fetched = conn.execute(
+                    "SELECT * FROM clean_news ORDER BY pub_date DESC LIMIT ?", (limit,)
+                ).fetchall()
+                rows = [dict(r) for r in fetched]
+        else:
+            rows = db.get_unsummarized_news(limit=limit)
+    except Exception as e:
+        logger.error(f"요약 대상 데이터 조회 중 오류: {e}")
+        # [수정] 숨어있던 DB 에러를 화면에 띄워 사용자가 인지할 수 있도록 보완
+        print(f"\n{ui.ERR}[오류] 요약 대상 데이터 조회 중 문제가 발생했습니다: {e}{ui.FG}")
         ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
         return
 
-    # [로그 추가] 파이프라인 시작
-    logger.info(f"AI 3줄 요약 파이프라인 시작 (대상: {len(rows)}건)")
-    print(f"\n{ui.HL}>> 미요약 기사 {len(rows)}건 AI 요약 시작...{ui.FG}")
-    success, failed = 0, 0
+    if not rows:
+        logger.info(f"조건(target: {target})에 맞는 요약 대상 기사가 없어 작업을 건너뜁니다.")
+        print(f"\n{ui.HL}요약할 대상 기사가 없습니다.{ui.FG}")
+        ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
+        return
+
+    logger.info(f"AI 3줄 요약 파이프라인 시작 (대상: {len(rows)}건, 타겟: {target})")
+    print(f"\n{ui.HL}>> 대상 기사 {len(rows)}건 AI 요약 시작...{ui.FG}")
+    
+    success, failed, skipped = 0, 0, 0
+    
     for row in rows:
+        # 이미 요약된 기사는 스킵 처리하여 사용자님이 기대하신 동작 수행
+        if target != "unsummarized" and row.get("is_summarized"):
+            print(f"   [스킵] {row['title'][:30]}... (이미 요약됨)")
+            skipped += 1
+            continue
+
         try:
             summary = summarize_one(row["title"], row["content"])
             db.update_ai_summary(row["news_id"], summary)
-            print(f"   [완료] {row['title']}")
+            print(f"   [완료] {row['title'][:40]}...")
             success += 1
         except Exception as e:
-            # [로그 추가] 개별 기사의 AI 통신 실패 (Quota 제한, 타임아웃, 정책 위반 등)
             logger.error(f"[{row['news_id']}] AI 요약 생성 실패: {e}")
-            print(f"   {ui.ERR}[실패] {row['title']}: {e}{ui.FG}")
+            print(f"   {ui.ERR}[실패] {row['title'][:30]}...: {e}{ui.FG}")
             failed += 1
 
-    # [로그 추가] 파이프라인 완료 통계
-    logger.info(f"AI 3줄 요약 파이프라인 종료 (성공: {success}건, 실패: {failed}건)")
+    logger.info(f"AI 3줄 요약 파이프라인 종료 (성공: {success}건, 실패: {failed}건, 스킵: {skipped}건)")
+    
     print(f"\n{ui.HL}[ 요약 결과 ]{ui.FG}")
-    print(f"  - 대상: {len(rows)}건")
+    print(f"  - 조회 대상: {len(rows)}건")
     print(f"  - 성공(DB 반영): {success}건")
     print(f"  - 실패: {failed}건")
+    if skipped > 0:
+        print(f"  - 스킵(이미 요약됨): {skipped}건")
+        
     ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
 
 
@@ -109,13 +142,15 @@ def run_menu_show():
         print(f"{ui.FG}  아래 메뉴 번호를 선택하거나, CLI 명령어를 직접 입력하여 실행할 수 있습니다.\n")
 
         print(f"{ui.HL}  [ 대화형 메뉴 ]{ui.FG}")
-        print("  1. 요약 미리보기 (기사 하나 직접 입력 -> AI 요약, DB 반영 없음)")
-        print("  2. 미요약 뉴스 일괄 요약 (--unsummarized, DB 반영)")
+        print("  1. 요약 미리보기 (기사 직접 입력 -> AI 요약, DB 반영 없음)")
+        print("  2. 미요약 뉴스 일괄 요약 (--unsummarized, 기본 최대 10건)")
+        print("  3. 전체 뉴스 일괄 요약 (--all, 이미 요약된 기사는 스킵됨)")
         print("  p. 이전 메뉴로 돌아가기 (상위 메뉴)\n")
 
         print(f"{ui.HL}  [ CLI 직접 입력 예시 ]{ui.FG}")
-        print("  summarize --unsummarized [--limit 숫자]")
-        print("  (입력 예: summarize --unsummarized --limit 10)")
+        print("  summarize [--unsummarized | --all | --id 뉴스번호] [--limit 숫자]")
+        print("  (입력 예 1: summarize --unsummarized --limit 20)")
+        print("  (입력 예 2: summarize --id 42)  ※ id는 list(5번 메뉴)의 No 활용")
 
         print("-" * w)
 
@@ -128,7 +163,9 @@ def run_menu_show():
         elif user_input == '1':
             run_summarize_preview()
         elif user_input == '2':
-            run_summarize_unsummarized()
+            run_summarize_action(target="unsummarized", limit=10)
+        elif user_input == '3':
+            run_summarize_action(target="all", limit=10)
         elif user_input.startswith("summarize"):
             run_summarize_cli(user_input)
         else:
@@ -140,21 +177,35 @@ def run_summarize_cli(command_str):
     try:
         args_list = shlex.split(command_str)
         args, unknown = summarize_parser.parse_known_args(args_list[1:])
+        
         if unknown:
-            print(f"\n알 수 없는 옵션이 포함되어 있습니다: {unknown}")
+            logger.warning(f"요약 CLI 실행 중 알 수 없는 옵션 감지: {unknown}")
+            print(f"\n{ui.ERR}알 수 없는 옵션이 포함되어 있습니다: {unknown}{ui.FG}")
             ui.pause("[Enter]를 눌러 돌아갑니다...")
             return
-        if args.unsummarized:
-            limit = args.limit
-            if limit <= 0:
-                # [로그 추가] 파라미터가 잘못되어 기본값으로 강제 적용한 상황 경고
-                logger.warning(f"잘못된 요약 제한 건수 입력('{limit}'). 기본값(10건)으로 보정되어 실행됩니다.")
-                print(f"\n{ui.ERR}[오류] 올바른 요약 제한 건수(양의 정수)가 아니므로 기본값 10건을 적용합니다.{ui.FG}")
-                limit = 10
-            run_summarize_unsummarized(limit=limit)
+
+        if args.id:
+            target = "id"
+        elif args.all:
+            target = "all"
+        elif args.unsummarized:
+            target = "unsummarized"
         else:
-            print("\n[안내] --unsummarized 플래그를 포함해서 실행하세요.")
+            print("\n[안내] --unsummarized, --all, --id 중 하나의 타겟 옵션을 반드시 포함하세요.")
             ui.pause("[Enter]를 눌러 돌아갑니다...")
+            return
+
+        if args.id and args.limit != 10:
+            print(f"\n{ui.HL}[안내] --id 옵션 사용 시 특정 1건만 조회하므로 --limit 옵션은 무시됩니다.{ui.FG}")
+
+        limit = args.limit
+        if limit <= 0:
+            logger.warning(f"잘못된 요약 제한 건수 입력('{limit}'). 기본값(10건)으로 보정되어 실행됩니다.")
+            print(f"\n{ui.ERR}[오류] 올바른 요약 제한 건수(양의 정수)가 아니므로 기본값 10건을 적용합니다.{ui.FG}")
+            limit = 10
+
+        run_summarize_action(target, args.id, limit)
+
     except SystemExit:
         print("\n[오류] 옵션 파싱에 실패했습니다.")
         ui.pause("[Enter]를 눌러 돌아갑니다...")
