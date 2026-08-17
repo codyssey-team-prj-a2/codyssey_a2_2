@@ -313,6 +313,21 @@ def run_report(date_from=None, date_to=None, fmt="console"):
         print(f"\n{ui.HL}>> {fmt.upper()} 리포트 파일이 저장되었습니다.{ui.FG}")
         print(f"   저장 경로: {path}")
 
+        # 2. [추가] CLI 명령어 실행 시 시각화 차트(PNG) 일괄 동시 생성
+        print(f"\n{ui.HL}>> 시각화 차트를 함께 생성합니다...{ui.FG}")
+        try:
+            chart_paths = [
+                chart_category_distribution(date_from, date_to),
+                chart_daily_trend(date_from, date_to),
+                chart_sentiment_distribution(date_from, date_to)
+            ]
+            logger.info(f"전체 시각화 차트 {len(chart_paths)}건 CLI 자동 생성 완료")
+            for cp in chart_paths:
+                print(f"   - 차트 저장 완료: {cp}")
+        except Exception as e:
+            logger.error(f"CLI 차트 일괄 생성 중 오류 발생: {e}")
+            print(f"   {ui.ERR}[경고] 차트 이미지 생성 중 오류가 발생했습니다: {e}{ui.FG}")
+
     ui.pause("\n[Enter]를 눌러 메뉴로 돌아갑니다...")
 
 
