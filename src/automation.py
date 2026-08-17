@@ -25,6 +25,9 @@ ui.ERR = ""
 if hasattr(ui, "rl_color"):
     ui.rl_color = lambda x: ""
 
+ui.clear_screen = lambda: None
+ui.pause = lambda msg="": None
+
 # [추가] 백그라운드 실행을 위한 전역 로거 초기화 및 생성
 logger_mgr.init_logger()
 logger = logger_mgr.get_logger(__name__)
