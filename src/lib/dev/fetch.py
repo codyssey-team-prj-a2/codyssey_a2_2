@@ -21,21 +21,38 @@ from selenium.webdriver.support import expected_conditions as EC
 from lib.db import raw_store
 from lib.system import config_mgr, ui, logger_mgr, help_mgr
 
+# newspaper3k 라이브러리 임포트
+try:
+    from newspaper import Article, Config
+except ImportError:
+    Article = None
+    Config = None
+
 logger = logger_mgr.get_logger(__name__)
 
 fetch_parser = argparse.ArgumentParser(prog="fetch", add_help=False)
 fetch_parser.add_argument("--source", type=str, required=True)
 fetch_parser.add_argument("--limit", type=str, default="20")
 
-# [원칙 4] 투명한 User-Agent 설정 (개인 연구 및 수집 봇 명시)
-USER_AGENT = "CodysseyNewsBot/1.0 (Personal Research & News Aggregator Project)"
-DEFAULT_TIMEOUT_SEC = 10
+# =====================================================================
+# [중요 설정] 로봇 배제 표준(robots.txt) 무시 여부 (기본값: True)
+# True로 설정 시, 모든 사이트의 robots.txt를 무시하고 본문 수집을 강행합니다.
+# 윤리적 수집을 원할 경우 False로 변경하세요.
+# =====================================================================
+IGNORE_ROBOTS_TXT = True
 
-# [원칙 1] 도메인별 robots.txt 파서 캐시 (중복 다운로드 방지)
+# 대중적인 브라우저처럼 보이도록 User-Agent 설정
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 CodysseyNewsBot/1.0"
+DEFAULT_TIMEOUT_SEC = 10
 _robot_cache = {}
 
-def _is_allowed_by_robots(url, user_agent="*"):
+
+def _is_allowed_by_robots(url, user_agent=USER_AGENT):
     """대상 URL이 robots.txt 정책에 따라 크롤링이 허용되는지 확인한다."""
+    # 상수 설정에 따라 로봇 확인 패스
+    if IGNORE_ROBOTS_TXT:
+        return True
+        
     try:
         parsed = urlparse(url)
         domain = f"{parsed.scheme}://{parsed.netloc}"
@@ -44,27 +61,28 @@ def _is_allowed_by_robots(url, user_agent="*"):
             rp = RobotFileParser()
             rp.set_url(f"{domain}/robots.txt")
             try:
-                rp.read()
+                resp = requests.get(f"{domain}/robots.txt", headers={"User-Agent": USER_AGENT}, timeout=5)
+                if resp.status_code == 200:
+                    rp.parse(resp.text.splitlines())
             except Exception:
-                # robots.txt가 없거나 접근 불가한 경우 기본 허용(Allow) 처리
                 pass
             _robot_cache[domain] = rp
             
-        # '*' 또는 특정 봇 이름으로 허용 여부 판정
         return _robot_cache[domain].can_fetch(user_agent, url)
     except Exception:
-        # 파싱 중 예외 발생 시 안전하게 허용 처리
         return True
 
 
 def _now_iso():
     return datetime.now().astimezone().isoformat()
 
+
 def _resolve_sources(source_name):
     sources = config_mgr.load_config().get("news_sources", [])
     sources = [s for s in sources if s.get("name")]
     if source_name == "all": return sources
     return [s for s in sources if s.get("name") == source_name]
+
 
 def _create_driver():
     options = Options()
@@ -79,9 +97,59 @@ def _create_driver():
     service = Service("/usr/bin/chromedriver")
     return webdriver.Chrome(service=service, options=options)
 
+
+def _resolve_google_news_url(driver, url, timeout=10):
+    """
+    [핵심] 구글 뉴스 RSS의 'inject.js' 다단계 리다이렉트를 대기하거나 강제로 뚫어
+    최종 언론사 주소로 넘어갈 때까지 추적합니다.
+    """
+    if "news.google.com" not in url:
+        return url
+        
+    try:
+        driver.set_page_load_timeout(timeout)
+        driver.get(url)
+        
+        # 1. 자연스러운 리다이렉트 대기 (inject.js 실행 대기)
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            current = driver.current_url
+            if "news.google.com" not in current:
+                time.sleep(1.0) # 페이지 렌더링 대기
+                return driver.current_url
+            time.sleep(0.5)
+            
+        # 2. 타임아웃까지 리다이렉트가 안 됐다면, 화면의 HTML을 뒤져 강제로 넘깁니다.
+        soup = BeautifulSoup(driver.page_source, "html.parser")
+        
+        # 2-1) 메타 리프레시 확인
+        meta = soup.find('meta', attrs={'http-equiv': lambda x: x and x.lower() == 'refresh'})
+        if meta:
+            content = meta.get('content', '')
+            match = re.search(r'url=([^;]+)', content, re.I)
+            if match:
+                real_url = match.group(1).strip("'\" ")
+                if not real_url.startswith('http'):
+                    real_url = urljoin(driver.current_url, real_url)
+                driver.get(real_url)
+                time.sleep(2.0)
+                return driver.current_url
+                
+        # 2-2) 외부로 나가는 a 태그 강제 클릭
+        a_tag = soup.find("a", href=re.compile(r"^https?://(?!news\.google\.com)"))
+        if a_tag and a_tag.get("href"):
+            driver.get(a_tag["href"])
+            time.sleep(2.0)
+            return driver.current_url
+            
+        return driver.current_url
+    except Exception as e:
+        logger.debug(f"구글 뉴스 강제 리다이렉트 추적 실패: {e}")
+        return getattr(driver, "current_url", url)
+
+
 def _extract_article_text(driver, url, timeout):
-    """Selenium을 통해 외부 기사 페이지에 접속하여 순수 본문 텍스트를 심층 추출합니다."""
-    # [원칙 1] 크롤링 전 robots.txt 준수 여부 엄격 검증
+    """위키피디아 및 API 크롤링용 Selenium + BeautifulSoup 추출 로직"""
     if not _is_allowed_by_robots(url):
         logger.warning(f"robots.txt 정책에 의해 수집이 차단된 URL입니다: {url}")
         return "", url
@@ -101,7 +169,6 @@ def _extract_article_text(driver, url, timeout):
                     real_url = match.group(1).strip("'\" ")
                     if not real_url.startswith("http"): real_url = urljoin(url, real_url)
                     
-                    # 리다이렉트된 주소도 robots.txt 검증
                     if not _is_allowed_by_robots(real_url):
                         return "", url
                         
@@ -137,8 +204,9 @@ def _extract_article_text(driver, url, timeout):
         logger.debug(f"본문 추출 실패 ({url}): {e}")
         return "", url
 
+
 def fetch_via_rss(source, limit=20, timeout=DEFAULT_TIMEOUT_SEC):
-    uri = source.get("uri") or source.get("url") or ""
+    uri = source.get("uri")
     if not uri: return [], "등록된 URI가 없습니다."
 
     try:
@@ -160,21 +228,61 @@ def fetch_via_rss(source, limit=20, timeout=DEFAULT_TIMEOUT_SEC):
             title = entry.get("title", "").strip()
             if not title: continue
             
-            link_url = entry.get("link", "")
+            google_url = entry.get("link", "")
             raw_summary = entry.get("summary", "")
             clean_summary = BeautifulSoup(raw_summary, "html.parser").get_text(separator=" ", strip=True)
             
             full_content = ""
-            final_url = link_url
+            final_url = google_url
+            fetch_status = "미시도"
             
-            if link_url:
+            if google_url:
                 if not driver:
                     try: driver = _create_driver()
-                    except Exception as e: return records, "Selenium 브라우저 구동 실패"
+                    except Exception: pass
                 
                 print(f"    [{count}/{limit}] {title[:30]}... 수집 중", end="", flush=True)
-                full_content, resolved_url = _extract_article_text(driver, link_url, timeout)
-                if resolved_url: final_url = resolved_url
+                
+                # 1. Selenium을 이용해 구글 뉴스 강제 리다이렉트 추적
+                if driver:
+                    final_url = _resolve_google_news_url(driver, google_url, timeout)
+                
+                # 2. 로봇 정책 검사
+                if not _is_allowed_by_robots(final_url):
+                    fetch_status = "실패: robots.txt 차단"
+                else:
+                    # 3. newspaper3k 활용 본문 추출
+                    if Article:
+                        try:
+                            config = Config()
+                            config.browser_user_agent = USER_AGENT
+                            config.request_timeout = timeout
+                            config.fetch_images = False
+                            
+                            article = Article(final_url, config=config, language='ko')
+                            if driver and driver.current_url == final_url:
+                                article.set_html(driver.page_source)
+                            else:
+                                article.download()
+                                
+                            article.parse()
+                            full_content = article.text.strip()
+                            
+                            if len(full_content) > 50:
+                                fetch_status = "성공 (newspaper3k)"
+                        except Exception as e:
+                            pass
+                            
+                    # 4. newspaper3k 실패 시 기존 BS4 로직으로 Fallback
+                    if not full_content and driver and driver.current_url == final_url:
+                        soup = BeautifulSoup(driver.page_source, 'html.parser')
+                        paragraphs = soup.find_all('p')
+                        full_content = " ".join([p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 20])
+                        if len(full_content) > 50:
+                            fetch_status = "성공 (BS4 Fallback)"
+                        else:
+                            fetch_status = "실패: 본문 길이 부족"
+                            
                 print(f"\r    [{count}/{limit}] {title[:30]}... 완료!      ")
                 count += 1
                 
@@ -187,7 +295,9 @@ def fetch_via_rss(source, limit=20, timeout=DEFAULT_TIMEOUT_SEC):
                 "category": source.get("category", "종합"),
                 "title": title,
                 "content": final_content,
-                "url": final_url,
+                "url": google_url,
+                "final_url": final_url,
+                "fetch_status": fetch_status,
                 "published_at": entry.get("published", None),
                 "collected_at": _now_iso(),
             })
@@ -199,7 +309,7 @@ def fetch_via_rss(source, limit=20, timeout=DEFAULT_TIMEOUT_SEC):
 
 
 def fetch_via_api(source, limit=20, timeout=DEFAULT_TIMEOUT_SEC):
-    base_uri = source.get("uri") or ""
+    base_uri = source.get("uri")
     if not base_uri: return [], "등록된 URI가 없습니다."
 
     base_uri = base_uri.rstrip("/")
@@ -235,6 +345,7 @@ def fetch_via_api(source, limit=20, timeout=DEFAULT_TIMEOUT_SEC):
             
             content = ""
             final_url = external_url
+            fetch_status = "미시도"
 
             if external_url:
                 if not driver:
@@ -244,7 +355,11 @@ def fetch_via_api(source, limit=20, timeout=DEFAULT_TIMEOUT_SEC):
                 if driver:
                     full_content, resolved_url = _extract_article_text(driver, external_url, timeout)
                     if resolved_url: final_url = resolved_url
-                    if full_content: content = full_content
+                    if full_content: 
+                        content = full_content
+                        fetch_status = "성공"
+                    else:
+                        fetch_status = "실패: 내용 부족 또는 차단"
 
             if not content and raw_text:
                 content = BeautifulSoup(raw_text, "html.parser").get_text(separator=" ", strip=True)
@@ -261,7 +376,9 @@ def fetch_via_api(source, limit=20, timeout=DEFAULT_TIMEOUT_SEC):
                 "category": source.get("category", "IT"),
                 "title": title,
                 "content": content,
-                "url": final_url,
+                "url": external_url if external_url else final_url,
+                "final_url": final_url,
+                "fetch_status": fetch_status,
                 "published_at": pub_date,
                 "collected_at": _now_iso(),
             })
@@ -290,7 +407,7 @@ def _parse_relative_date(text):
     except ValueError: return None
 
 def fetch_via_crawl(source, limit=20, timeout=DEFAULT_TIMEOUT_SEC):
-    uri = source.get("uri") or source.get("url") or ""
+    uri = source.get("uri")
     if not uri: return [], "등록된 URI가 없습니다."
 
     driver = None
@@ -322,7 +439,10 @@ def fetch_via_crawl(source, limit=20, timeout=DEFAULT_TIMEOUT_SEC):
             seen_urls.add(link_url)
             
             print(f"    [{count}/{limit}] {title[:30]}... 수집 중", end="", flush=True)
+            
             full_content, resolved_url = _extract_article_text(driver, link_url, timeout)
+            fetch_status = "성공" if full_content else "실패"
+            
             print(f"\r    [{count}/{limit}] {title[:30]}... 완료!      ")
             count += 1
             
@@ -332,7 +452,9 @@ def fetch_via_crawl(source, limit=20, timeout=DEFAULT_TIMEOUT_SEC):
                 "category": source.get("category", "종합"),
                 "title": title,
                 "content": full_content,
-                "url": resolved_url if resolved_url else link_url,
+                "url": link_url,
+                "final_url": resolved_url if resolved_url else link_url,
+                "fetch_status": fetch_status,
                 "published_at": _parse_relative_date(title),
                 "collected_at": _now_iso(),
             })
@@ -410,7 +532,7 @@ def run_menu_show():
         if not sources: print("  (등록된 뉴스 소스가 없습니다. 환경 설정 메뉴에서 먼저 등록해주세요.)")
         else:
             for idx, s in enumerate(sources, 1):
-                name, method, uri, category, status = s.get("name", "이름없음"), (s.get("method") or "rss").upper(), s.get("uri") or s.get("url") or "URI 없음", s.get("category", "종합"), "활성" if s.get("enabled", True) else "비활성"
+                name, method, uri, category, status = s.get("name", "이름없음"), (s.get("method") or "rss").upper(), s.get("uri", "URI 없음"), s.get("category", "종합"), "활성" if s.get("enabled", True) else "비활성"
                 print(f"  {idx}. {ui.HL}{name}{ui.FG}\n     ├─ [방식] {ui.HL}{method:<5}{ui.FG} │  [카테고리] {category:<6} │  [상태] {status}\n     └─ [URI ] {uri}")
         ui.draw_line("─")
         print(f"\n{ui.HL}  [ 대화형 메뉴 ]{ui.FG}\n  1. 뉴스 수집 실행\n  2. 수집 현황 확인\n")
