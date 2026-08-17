@@ -1,29 +1,32 @@
 {
-  "setup_step": 4,
-  "news_sources": [
-    {
-      "name": "google_news_it_rss",
-      "method": "rss",
-      "url": "https://news.google.com/rss/search?q=IT&hl=ko&gl=KR&ceid=KR:ko",
-      "uri": "https://news.google.com/rss/search?q=IT&hl=ko&gl=KR&ceid=KR:ko",
-      "category": "IT",
-      "enabled": true
-    },
-    {
-      "name": "hackernews_api",
-      "method": "api",
-      "url": "https://hacker-news.firebaseio.com/v0",
-      "uri": "https://hacker-news.firebaseio.com/v0",
-      "category": "Tech",
-      "enabled": true
-    },
-    {
-      "name": "wikipedia_current_events_crawl",
-      "method": "crawl",
-      "url": "https://ko.wikipedia.org/wiki/%ED%8F%AC%ED%84%B8:%EC%B5%9C%EA%B7%BC_%EC%82%AC%EA%B1%B4",
-      "uri": "https://ko.wikipedia.org/wiki/%ED%8F%AC%ED%84%B8:%EC%B5%9C%EA%B7%BC_%EC%82%AC%EA%B1%B4",
-      "category": "종합",
-      "enabled": true
-    }
-  ]
+	"news_sources": [
+		{
+			"name": "google_news_it_rss",
+			"method": "rss",
+			"uri": "https://news.google.com/rss/search?q=IT&hl=ko&gl=KR&ceid=KR:ko",
+			"category": "IT",
+			"enabled": true
+		},
+		{
+			"name": "hada_news_rss",
+			"method": "rss",
+			"uri": "https://news.hada.io/rss/news",
+			"category": "종합",
+			"enabled": true
+		},
+		{
+			"name": "hackernews_api",
+			"method": "api",
+			"uri": "https://hacker-news.firebaseio.com/v0",
+			"category": "Tech",
+			"enabled": true
+		},
+		{
+			"name": "wikipedia_current_events_crawl",
+			"method": "crawl",
+			"uri": "https://ko.wikipedia.org/wiki/%ED%8F%AC%ED%84%B8:%EC%B5%9C%EA%B7%BC_%EC%82%AC%EA%B1%B4",
+			"category": "종합",
+			"enabled": true
+		}
+	]
 }
