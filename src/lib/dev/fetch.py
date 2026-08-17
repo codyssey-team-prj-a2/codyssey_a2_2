@@ -199,7 +199,7 @@ def fetch_via_rss(source, limit=20, timeout=DEFAULT_TIMEOUT_SEC):
 
 
 def fetch_via_api(source, limit=20, timeout=DEFAULT_TIMEOUT_SEC):
-    base_uri = source.get("uri") or source.get("url") or ""
+    base_uri = source.get("uri") or ""
     if not base_uri: return [], "등록된 URI가 없습니다."
 
     base_uri = base_uri.rstrip("/")

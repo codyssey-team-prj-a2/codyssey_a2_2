@@ -13,8 +13,17 @@
 """
 import sys
 
+# [수정] ui 모듈 임포트 추가
+from lib.system import config_mgr, logger_mgr, ui
 from lib.dev import analyze, clean, export, fetch, list_news, report, sentiment, show, summarize
-from lib.system import config_mgr, logger_mgr
+
+# [수정] 스케줄러 환경에서 파일로 로그를 남길 때 ANSI 색상 코드가 들어가
+# 텍스트가 깨지거나 하얗게 보이는 현상을 막기 위해 색상 코드를 무력화(Plain Text)합니다.
+ui.FG = ""
+ui.HL = ""
+ui.ERR = ""
+if hasattr(ui, "rl_color"):
+    ui.rl_color = lambda x: ""
 
 # [추가] 백그라운드 실행을 위한 전역 로거 초기화 및 생성
 logger_mgr.init_logger()

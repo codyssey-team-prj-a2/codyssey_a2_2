@@ -12,7 +12,11 @@ from lib.system import config_mgr
 
 def _raw_dir():
     cfg = config_mgr.load_config()
-    raw_dir = cfg.get("raw_path", "./data/raw")
+    # [수정] config.json의 db_path를 기준으로 동적 경로 생성
+    db_path = cfg.get("storage", {}).get("db_path", "./data/codyssey.db")
+    parent_dir = os.path.dirname(db_path)
+    raw_dir = os.path.join(parent_dir, "raw")
+    
     os.makedirs(raw_dir, exist_ok=True)
     return raw_dir
 

@@ -393,7 +393,6 @@ def _add_source_action(cfg):
         "name": name,
         "method": method,
         "uri": uri,
-        "url": uri,
         "category": category,
         "enabled": True
     })
@@ -564,7 +563,6 @@ def _edit_source_action(cfg):
             "name": final_name,
             "method": final_method,
             "uri": final_uri,
-            "url": final_uri,
             "category": final_cat
         })
         config_mgr.save_config(cfg)
